@@ -1,0 +1,2150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JQ Bench — JSON Query Workbench</title>
+<style>
+  :root{
+    --bg: #0e1216;
+    --panel: #151a20;
+    --panel-2: #1b2129;
+    --border: #262e38;
+    --border-soft: #1f2630;
+    --text: #dfe4ea;
+    --muted: #7c8798;
+    --muted-2: #57626f;
+    --accent: #4fd6c0;
+    --accent-dim: #2c766c;
+    --accent-2: #e8b64c;
+    --danger: #e5636a;
+    --mono: "IBM Plex Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --radius: 4px;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ height:100%; overflow:hidden; }
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height:1.5;
+  }
+  ::selection{ background: var(--accent-dim); color:#fff; }
+  ::-webkit-scrollbar{ width:10px; height:10px; }
+  ::-webkit-scrollbar-track{ background: var(--panel); }
+  ::-webkit-scrollbar-thumb{ background: var(--border); border-radius: 6px; }
+  ::-webkit-scrollbar-thumb:hover{ background: var(--muted-2); }
+
+  a{ color: var(--accent); }
+
+  /* ---------- shell ---------- */
+  .app{ display:flex; flex-direction:column; height:100vh; width:100vw; max-width:100vw; overflow:hidden; }
+  header.top{
+    display:flex; align-items:center; gap:14px;
+    padding:10px 16px; border-bottom:1px solid var(--border);
+    background: linear-gradient(180deg, #131820, #0e1216);
+    flex-shrink:0;
+  }
+  .brand{ display:flex; align-items:center; gap:9px; }
+  .brand .mark{
+    width:22px; height:22px; border-radius:5px;
+    background: conic-gradient(from 220deg, var(--accent), var(--accent-2), var(--accent));
+    display:flex; align-items:center; justify-content:center;
+    font-family: var(--mono); font-weight:700; font-size:11px; color:#0e1216;
+  }
+  .brand b{ font-size:14px; letter-spacing:.2px; }
+  .brand span.tag{ color: var(--muted); font-size:11px; font-family: var(--mono); }
+  header.top .spacer{ flex:1; }
+  .rowcount-badge{
+    font-family: var(--mono); font-size:11.5px; color: var(--muted);
+    background: var(--panel-2); border:1px solid var(--border); border-radius: 20px;
+    padding: 4px 12px;
+  }
+  .rowcount-badge b{ color: var(--accent); font-weight:600; }
+
+  main.layout{
+    flex:1; display:grid;
+    grid-template-columns: var(--sidebar-width, 300px) 6px minmax(0, 1fr);
+    min-height:0;
+    min-width:0;
+    overflow:hidden;
+  }
+  .col-left{
+    border-right:1px solid var(--border);
+    display:flex; flex-direction:column;
+    min-height:0;
+    min-width:0;
+    overflow:hidden;
+    background: var(--bg);
+  }
+  .col-resize{
+    width:6px; cursor:col-resize; background:var(--border); flex-shrink:0; position:relative; z-index:4;
+  }
+  .col-resize:hover, .col-resize.dragging{ background:var(--accent-dim); }
+  .col-resize::after{ content:""; position:absolute; top:50%; left:1px; width:4px; height:42px; transform:translateY(-50%); background:var(--muted-2); border-radius:3px; opacity:.65; }
+  .col-right{
+    display:flex; flex-direction:column;
+    min-height:0;
+    min-width:0;
+    overflow:hidden;
+  }
+
+  /* ---------- tabs ---------- */
+  .tabbar{
+    display:flex; border-bottom:1px solid var(--border);
+    flex-shrink:0; background: var(--panel);
+  }
+  .tabbar button{
+    flex:1; background:none; border:none; color: var(--muted);
+    padding:9px 6px; font-size:11.5px; font-weight:600; letter-spacing:.3px;
+    cursor:pointer; border-bottom:2px solid transparent; text-transform:uppercase;
+    font-family: var(--sans);
+  }
+  .tabbar button:hover{ color: var(--text); }
+  .tabbar button.active{ color: var(--accent); border-bottom-color: var(--accent); }
+  .tabpanel{ display:none; flex:1; min-height:0; min-width:0; flex-direction:column; overflow-x:hidden; overflow-y:auto; padding:10px; }
+  .tabpanel.active{ display:flex; }
+
+  /* ---------- generic ---------- */
+  h3.sec{
+    font-size:10.5px; text-transform:uppercase; letter-spacing:.8px; color: var(--muted);
+    margin: 14px 0 8px; font-weight:700;
+  }
+  h3.sec:first-child{ margin-top:0; }
+  label.lbl{ display:block; font-size:11px; color: var(--muted); margin-bottom:4px; }
+  textarea, input[type=text], input[type=number], select{
+    width:100%; background: var(--panel-2); color: var(--text);
+    border:1px solid var(--border); border-radius: var(--radius);
+    padding:6px 8px; font-size:12.5px; font-family: var(--mono);
+    outline:none;
+  }
+  textarea:focus, input:focus, select:focus{ border-color: var(--accent-dim); }
+  textarea{ resize: vertical; font-size:11.5px; }
+  select{ font-family: var(--sans); }
+  input::placeholder{ color: var(--muted-2); }
+
+  button{
+    font-family: var(--sans); cursor:pointer; border-radius: var(--radius);
+    border:1px solid var(--border); background: var(--panel-2); color: var(--text);
+    padding:6px 10px; font-size:12px; font-weight:600;
+  }
+  button:hover{ border-color: var(--muted-2); }
+  button:active{ transform: translateY(1px); }
+  button.primary{ background: var(--accent); border-color: var(--accent); color:#0b1210; }
+  button.primary:hover{ background:#63e0cb; }
+  button.ghost{ background:transparent; }
+  button.danger-ghost{ background:transparent; color: var(--danger); border-color: var(--border); }
+  button.danger-ghost:hover{ border-color: var(--danger); }
+  button.xs{ padding:3px 7px; font-size:11px; }
+  button.icon-btn{ padding:4px 6px; line-height:1; }
+  button:disabled{ opacity:.4; cursor:not-allowed; }
+
+  .row{ display:flex; gap:6px; align-items:center; }
+  .row.wrap{ flex-wrap:wrap; }
+  .grow{ flex:1; min-width:0; }
+  .stack{ display:flex; flex-direction:column; gap:8px; }
+
+  .hint{ color: var(--muted-2); font-size:10.8px; margin-top:4px; }
+  .hint code{ background: var(--panel-2); padding:1px 4px; border-radius:3px; color: var(--accent); }
+
+  code.pathcode{ font-family: var(--mono); color: var(--accent-2); background: var(--panel-2); padding:1px 4px; border-radius:3px; }
+
+  /* ---------- load panel ---------- */
+  .drop-zone{
+    border:1.5px dashed var(--border); border-radius: 6px; padding:16px;
+    text-align:center; color: var(--muted); font-size:11.5px; cursor:pointer;
+  }
+  .drop-zone:hover{ border-color: var(--accent-dim); color: var(--text); }
+  .drop-zone.drag{ border-color: var(--accent); background: rgba(79,214,192,0.06); }
+  .status-line{ font-size:11px; margin-top:6px; }
+  .status-line.ok{ color: var(--accent); }
+  .status-line.err{ color: var(--danger); }
+
+  /* ---------- tree ---------- */
+  .tree{ font-family: var(--mono); font-size:11.5px; }
+  .tnode{ margin-left:14px; }
+  .tnode.root{ margin-left:0; }
+  .tline{ display:flex; align-items:flex-start; gap:4px; cursor:pointer; padding:1px 2px; border-radius:3px; }
+  .tline:hover{ background: var(--panel-2); }
+  .tcaret{ width:12px; flex-shrink:0; color: var(--muted-2); user-select:none; }
+  .tkey{ color: var(--accent-2); }
+  .tkey.arridx{ color: var(--muted); }
+  .tpunc{ color: var(--muted-2); }
+  .tval-string{ color: #9fd671; }
+  .tval-number{ color: #6fb3e0; }
+  .tval-bool{ color: #c792ea; }
+  .tval-null{ color: var(--muted-2); font-style:italic; }
+  .tmeta{ color: var(--muted-2); font-size:10.5px; }
+  .tpath-copy{ display:none; margin-left:6px; color: var(--muted-2); font-size:10px; }
+  .tline:hover .tpath-copy{ display:inline; }
+  .tpath-copy:hover{ color: var(--accent); }
+
+  /* ---------- filter/sort rows ---------- */
+  .cond-row{
+    min-width:0;
+    background: var(--panel-2); border:1px solid var(--border); border-radius: var(--radius);
+    padding:7px; display:flex; flex-direction:column; gap:6px;
+  }
+  .cond-join{
+    align-self:flex-start; font-family: var(--mono); font-size:10px; font-weight:700;
+    background: var(--bg); border:1px solid var(--border); color: var(--accent);
+    border-radius: 3px; padding:2px 6px; cursor:pointer;
+  }
+  .cond-fields{ display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap:5px; min-width:0; }
+  .cond-fields.full{ grid-template-columns: 1fr; }
+  .cond-fields input, .cond-fields select{ font-size:11.5px; padding:5px 6px; min-width:0; }
+  .cond-foot{ display:flex; justify-content:flex-end; }
+
+  .sort-row{
+    background: var(--panel-2); border:1px solid var(--border); border-radius: var(--radius);
+    padding:6px; display:flex; align-items:center; gap:6px;
+  }
+  .sort-badge{
+    font-family: var(--mono); font-size:10px; color: var(--bg); background: var(--accent);
+    border-radius:3px; width:16px; height:16px; display:flex; align-items:center; justify-content:center;
+    flex-shrink:0; font-weight:700;
+  }
+
+  .col-chip-row{
+    display:flex; align-items:center; gap:6px; background: var(--panel-2);
+    border:1px solid var(--border); border-radius: var(--radius); padding:5px 6px;
+  }
+  .col-chip-row input{ padding:4px 6px; font-size:11.5px; }
+  .col-chip-row .colname{ width:34%; flex-shrink:0; }
+
+  .empty-note{ color: var(--muted-2); font-size:11px; padding:8px 2px; }
+
+  /* ---------- results header ---------- */
+  .results-bar{
+    display:flex; align-items:center; gap:8px; padding:6px 10px;
+    min-width:0; flex-wrap:wrap;
+    border-bottom:1px solid var(--border); flex-shrink:0; background: var(--panel);
+  }
+  .view-toggle{ display:flex; border:1px solid var(--border); border-radius: var(--radius); overflow:hidden; }
+  .view-toggle button{ border:none; border-radius:0; background: var(--panel-2); }
+  .view-toggle button.active{ background: var(--accent-dim); color:#fff; }
+  .results-bar .spacer{ flex:1; }
+  .results-body{ flex:1; overflow:auto; overflow-x:auto; overflow-y:auto; min-height:0; min-width:0; position:relative; }
+
+  /* ---------- table ---------- */
+  table.rtable{ border-collapse: collapse; width:max-content; min-width:100%; table-layout:fixed; font-family: var(--mono); font-size:11.5px; }
+  table.rtable th, table.rtable td{ box-sizing:border-box; }
+  table.rtable .col-resizer{ position:absolute; top:0; right:-3px; width:6px; height:100%; cursor:col-resize; z-index:3; }
+  table.rtable .col-resizer:hover, table.rtable .col-resizer.dragging{ background:var(--accent-dim); }
+  table.rtable thead th{
+    position: sticky; top:0; background: var(--panel-2); border-bottom:1px solid var(--border);
+    text-align:left; padding:7px 10px; color: var(--accent-2); font-weight:600; white-space:nowrap;
+    z-index:1; cursor:pointer;
+  }
+  table.rtable thead th:hover{ color:var(--accent); }
+  table.rtable tbody td{
+    padding:5px 10px; border-bottom:1px solid var(--border-soft); white-space:nowrap;
+    max-width:340px; overflow:hidden; text-overflow:ellipsis; color: var(--text);
+  }
+  table.rtable tbody tr:hover{ background: var(--panel-2); }
+  table.rtable tbody td.idxcol{ color: var(--muted-2); }
+  .cell-null{ color: var(--muted-2); font-style:italic; }
+  .cell-obj{ color: var(--accent); cursor:pointer; }
+  .cell-obj:hover{ text-decoration:underline; }
+  .cell-link{ color:var(--accent); text-decoration:underline; text-underline-offset:2px; }
+  .cell-link:hover{ color:#63e0cb; }
+
+  .pager{
+    display:flex; align-items:center; gap:8px; padding:5px 10px;
+    min-width:0; flex-wrap:wrap; border-top:1px solid var(--border);
+    flex-shrink:0; background: var(--panel); font-size:11.5px; color: var(--muted);
+  }
+  .pager select{ width:auto; padding:3px 6px; font-size:11px; }
+  .pager .spacer{ flex:1; }
+
+  pre.jsonview{
+    margin:0; padding:14px; font-family: var(--mono); font-size:11.5px; white-space:pre-wrap; word-break:break-word;
+  }
+  .jk{ color:#e8b64c; } .js{ color:#9fd671; } .jn{ color: var(--text); } .jb{ color:#c792ea; } .jnull{ color:var(--muted-2); }
+
+  .empty-state{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    height:100%; color: var(--muted-2); gap:8px; text-align:center; padding:30px;
+  }
+  .empty-state b{ color: var(--muted); font-size:13px; }
+
+  /* jq box */
+  .jqbox{
+    border-top:1px solid var(--border); background: #0b0f13; flex-shrink:0;
+    max-height:130px; display:flex; flex-direction:column;
+  }
+  .jqbox .jqhead{
+    display:flex; align-items:center; gap:8px; padding:6px 14px; border-bottom:1px solid var(--border-soft);
+  }
+  .jqbox .jqhead b{ font-size:10.5px; text-transform:uppercase; letter-spacing:.6px; color: var(--muted); }
+  .jqbox pre{
+    margin:0; padding:8px 14px; font-family: var(--mono); font-size:12px; color: var(--accent);
+    overflow:auto; flex:1;
+  }
+  .jqbox .note{ color: var(--muted-2); font-size:10px; padding:0 14px 8px; }
+
+  /* ---------- data mutation ---------- */
+  .mut-row{
+    background: var(--panel-2); border:1px solid var(--border); border-radius: var(--radius);
+    padding:7px; display:flex; flex-direction:column; gap:6px;
+  }
+  .mut-grid{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:5px; }
+  .mut-grid.full{ grid-template-columns:1fr; }
+  .mut-grid input,.mut-grid select{ font-size:11.5px; padding:5px 6px; min-width:0; }
+  .mut-actions{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .mut-actions button{ flex:1; min-width:110px; }
+  .mut-preview{ color:var(--muted-2); font-size:10.5px; }
+  .mut-preview b{ color:var(--accent); }
+
+  /* saved queries */
+  .saved-item{
+    display:flex; align-items:center; gap:6px; padding:6px 7px; background: var(--panel-2);
+    border:1px solid var(--border); border-radius: var(--radius);
+  }
+  .saved-item .sname{ flex:1; font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .saved-item .sdate{ font-size:9.5px; color: var(--muted-2); font-family: var(--mono); }
+
+  /* modal */
+  .modal-back{
+    position:fixed; inset:0; background: rgba(4,6,8,0.7); display:none;
+    align-items:center; justify-content:center; z-index:50; padding:30px;
+  }
+  .modal-back.show{ display:flex; }
+  .modal{
+    background: var(--panel); border:1px solid var(--border); border-radius:6px;
+    max-width:700px; width:100%; max-height:80vh; display:flex; flex-direction:column;
+  }
+  .modal .mhead{ padding:10px 14px; border-bottom:1px solid var(--border); display:flex; align-items:center; }
+  .modal .mhead b{ flex:1; font-size:12.5px; }
+  .modal .mbody{ padding:14px; overflow:auto; }
+  .modal pre{ margin:0; font-family: var(--mono); font-size:11.5px; white-space:pre-wrap; word-break:break-word; }
+
+  /* wide variant, used for the expanded JSON editor */
+  .modal-wide{ max-width:1200px; width:94vw; height:88vh; max-height:88vh; }
+  .modal-wide .mbody{ flex:1; min-height:0; padding:0; display:flex; flex-direction:column; overflow:hidden; }
+  .modal-wide .mfoot{
+    display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+    padding:9px 14px; border-top:1px solid var(--border); flex-shrink:0;
+  }
+  .modal-wide .mfoot .status-line{ margin:0; }
+
+  /* ---------- json editor sizing ---------- */
+  .json-editor{
+    flex:1 1 auto; min-height:280px; font-size:12.5px; line-height:1.55; resize:none;
+  }
+  .json-editor-expanded{
+    flex:1; min-height:0; width:100%; height:100%; border:none; border-radius:0;
+    padding:14px; font-size:13px; line-height:1.6; resize:none;
+  }
+  .json-editor-expanded:focus{ border-color:transparent; }
+
+  .toast{
+    position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+    background: var(--panel-2); border:1px solid var(--accent-dim); color: var(--text);
+    padding:8px 16px; border-radius:20px; font-size:12px; z-index:100; opacity:0; pointer-events:none;
+    transition: opacity .15s ease, transform .15s ease;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(-6px); }
+
+  .kbd{ font-family: var(--mono); background: var(--panel-2); border:1px solid var(--border); border-radius:3px; padding:0 4px; font-size:10px; }
+
+  @media (max-width: 1100px){
+    main.layout{ grid-template-columns: var(--sidebar-width, 300px) 6px minmax(0, 1fr); }
+    .tabbar button{ padding-left:4px; padding-right:4px; font-size:10.5px; }
+    .results-bar{ gap:5px; }
+  }
+  @media (max-width: 800px){
+    main.layout{ grid-template-columns: 1fr; grid-template-rows: minmax(220px, 42vh) minmax(0, 1fr); overflow:hidden; }
+    .col-left{ border-right:none; border-bottom:1px solid var(--border); }
+    .col-resize{ display:none; }
+  }
+  @media (max-width: 520px){
+    .brand span.tag{ display:none; }
+    header.top{ padding:7px 10px; }
+    .rowcount-badge{ font-size:10px; padding:3px 8px; }
+    .tabpanel{ padding:8px; }
+    .cond-fields{ grid-template-columns: 1fr; }
+    .results-bar{ padding:5px 7px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <div class="brand">
+      <div class="mark">jq</div>
+      <b>JQ Bench</b>
+      <span class="tag">json query workbench</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="rowcount-badge" id="rowcountBadge">no data loaded</div>
+  </header>
+
+  <main class="layout">
+    <!-- LEFT COLUMN -->
+    <section class="col-left">
+      <div class="tabbar">
+        <button data-tab="load" class="active">Load</button>
+        <button data-tab="edit">Edit JSON</button>
+        <button data-tab="mutate">Mutate</button>
+        <button data-tab="browse">Browse</button>
+        <button data-tab="query">Query</button>
+        <button data-tab="saved">Saved</button>
+      </div>
+
+      <!-- LOAD TAB -->
+      <div class="tabpanel active" id="tab-load">
+        <h3 class="sec">Paste JSON</h3>
+        <textarea id="jsonInput" rows="9" placeholder='Paste a JSON array or object here, e.g. [{"id":1,"name":"Ada"}, ...]'></textarea>
+        <div class="row" style="margin-top:6px;">
+          <button class="primary grow" id="loadBtn">Load JSON</button>
+          <button class="ghost xs" id="sampleBtn">Sample</button>
+          <button class="ghost xs" id="prettifyBtn">Prettify</button>
+        </div>
+        <div class="status-line" id="loadStatus"></div>
+
+        <h3 class="sec">Or upload a file</h3>
+        <div class="drop-zone" id="dropZone">
+          Drop a <b>.json</b> file here, or click to browse
+        </div>
+        <input type="file" id="fileInput" accept=".json,application/json" style="display:none;">
+
+        <h3 class="sec">Root path <span class="hint" style="margin:0;">(optional)</span></h3>
+        <input type="text" id="rootPathInput" placeholder="e.g. data.items — leave blank if top level is the array">
+        <div class="hint">If your JSON is an object with the array nested inside, point to it here. Supports <code>a.b[0].c</code> syntax.</div>
+      </div>
+
+      <!-- EDIT JSON TAB -->
+      <div class="tabpanel" id="tab-edit">
+        <div class="row" style="align-items:baseline;">
+          <h3 class="sec" style="margin:0 0 8px; flex:1;">Edit JSON</h3>
+          <button class="ghost xs" id="expandEditorBtn" title="Open in a larger editor">⤢ Expand</button>
+        </div>
+        <div class="hint" style="margin-bottom:6px;">Edit the currently loaded JSON directly. Validate before applying changes to the query.</div>
+        <textarea id="jsonEditor" class="json-editor" spellcheck="false" placeholder="Load JSON first, then edit it here…"></textarea>
+        <div class="row" style="margin-top:6px; flex-wrap:wrap;">
+          <button class="ghost xs" id="formatJsonBtn">Format</button>
+          <button class="ghost xs" id="validateJsonBtn">Validate</button>
+          <button class="primary xs" id="applyJsonBtn">Apply Changes</button>
+          <button class="ghost xs" id="saveJsonBtn">Save JSON</button>
+        </div>
+        <div class="status-line" id="editStatus"></div>
+        <div class="hint" style="margin-top:6px;">Save JSON downloads the edited file using the loaded filename. If your browser supports the File System Access API, you can choose where to save it.</div>
+      </div>
+
+      <!-- MUTATE TAB -->
+      <div class="tabpanel" id="tab-mutate">
+        <h3 class="sec">Field mutation</h3>
+        <div class="hint" style="margin-bottom:8px;">Insert, set to <code>null</code>, or conditionally delete fields on one object or every object in the current root.</div>
+
+        <div class="mut-row">
+          <div class="mut-grid">
+            <div>
+              <label class="lbl">Operation</label>
+              <select id="mutOperation">
+                <option value="insert">Insert / replace field</option>
+                <option value="null">Set field to null</option>
+                <option value="delete">Delete specific field</option>
+                <option value="deleteObjects">Delete objects matching field</option>
+                <option value="deleteNulls">Delete null-valued fields</option>
+              </select>
+            </div>
+            <div>
+              <label class="lbl">Scope</label>
+              <select id="mutScope">
+                <option value="all">All objects</option>
+                <option value="one">One object</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="mutFieldWrap">
+            <label class="lbl" id="mutFieldLabel">Field path</label>
+            <input type="text" id="mutField" placeholder="e.g. stats.likes or profile.name">
+            <div class="hint" id="mutFieldHint">Supports nested paths such as <code>stats.likes</code> and array indexes such as <code>items[0].name</code>.</div>
+          </div>
+
+          <div id="mutValueWrap">
+            <label class="lbl" id="mutValueLabel">Value</label>
+            <textarea id="mutValue" rows="3" placeholder='JSON value, e.g. "hello", 123, true, {"x":1}'></textarea>
+            <div class="hint" id="mutValueHint">For strings, use JSON quotes. Arrays/objects are also supported.</div>
+          </div>
+
+          <div id="mutRowWrap" style="display:none;">
+            <label class="lbl">Object index</label>
+            <input type="number" id="mutRowIndex" min="0" step="1" placeholder="0">
+            <div class="hint">Uses the object index in the current root rows, starting at 0.</div>
+          </div>
+
+          <div id="mutPreview" class="mut-preview">No mutation selected.</div>
+          <div class="mut-actions">
+            <button class="primary" id="mutApplyBtn">Apply mutation</button>
+            <button class="ghost" id="mutSaveBtn">Save mutated JSON</button>
+            <button class="danger-ghost" id="mutClearBtn">Clear</button>
+          </div>
+        </div>
+
+        <h3 class="sec">Examples</h3>
+        <div class="hint">Insert <code>status</code> with <code>"active"</code> on all objects; set <code>metadata.note</code> to <code>null</code>; delete fields by name, by value, or by both; or delete entire objects that contain a field, optionally matching its value. For example, delete objects containing <code>likes</code>, or only objects where <code>likes</code> equals <code>"4134"</code>.</div>
+      </div>
+
+      <!-- BROWSE TAB -->
+      <div class="tabpanel" id="tab-browse">
+        <div class="row" style="margin-bottom:8px;">
+          <input type="text" id="treeFilter" class="grow" placeholder="Filter keys/values in tree…">
+          <button class="ghost xs" id="expandAllBtn" title="Expand all">＋</button>
+          <button class="ghost xs" id="collapseAllBtn" title="Collapse all">－</button>
+        </div>
+        <div class="hint" style="margin-bottom:8px;">Click ▸ to expand. Hover a row and click <span class="hint">copy path</span> to grab its JSON path for use in filters, sorts, or columns.</div>
+        <div class="tree" id="treeRoot"><div class="empty-note">Load JSON to browse its structure.</div></div>
+      </div>
+
+      <!-- QUERY TAB -->
+      <div class="tabpanel" id="tab-query">
+        <h3 class="sec">Global search</h3>
+        <input type="text" id="searchInput" placeholder="Search across all fields…">
+        <div class="hint">Matches if any field of a row contains this text (case-insensitive).</div>
+
+        <h3 class="sec">Filters <span class="hint" style="margin:0;">field, operator, value</span></h3>
+        <div class="stack" id="filterList"></div>
+        <button class="ghost xs" id="addFilterBtn" style="margin-top:6px; align-self:flex-start;">+ Add condition</button>
+
+        <h3 class="sec">Sort</h3>
+        <div class="stack" id="sortList"></div>
+        <button class="ghost xs" id="addSortBtn" style="margin-top:6px; align-self:flex-start;">+ Add sort level</button>
+
+        <h3 class="sec">Limit / Offset</h3>
+        <div class="row">
+          <div class="grow">
+            <label class="lbl">Offset</label>
+            <input type="number" id="offsetInput" min="0" value="0" placeholder="0">
+          </div>
+          <div class="grow">
+            <label class="lbl">Limit</label>
+            <input type="number" id="limitInput" min="0" placeholder="all">
+          </div>
+        </div>
+
+        <h3 class="sec">Columns <span class="hint" style="margin:0;">select / extract fields</span></h3>
+        <div class="stack" id="colList"></div>
+        <div class="row" style="margin-top:6px;">
+          <button class="ghost xs" id="addColBtn">+ Add column</button>
+          <button class="ghost xs" id="detectColBtn">Detect from data</button>
+          <button class="ghost xs" id="clearColBtn">Clear (show all)</button>
+        </div>
+        <div class="hint">Extract nested arrays with paths like <code>videos[].durationSeconds</code>. Leave column list empty to show every top-level field.</div>
+
+        <div class="row" style="margin-top:16px;">
+          <button class="danger-ghost grow" id="resetQueryBtn">Reset query</button>
+        </div>
+      </div>
+
+      <!-- SAVED TAB -->
+      <div class="tabpanel" id="tab-saved">
+        <h3 class="sec">Save current query</h3>
+        <div class="row">
+          <input type="text" id="saveNameInput" class="grow" placeholder="Query name…">
+          <button class="primary xs" id="saveQueryBtn">Save</button>
+        </div>
+
+        <h3 class="sec">Saved queries</h3>
+        <div class="stack" id="savedList"><div class="empty-note">No saved queries yet.</div></div>
+
+        <h3 class="sec">Import / export config</h3>
+        <div class="row">
+          <button class="ghost xs grow" id="exportCfgBtn">Export .json</button>
+          <button class="ghost xs grow" id="importCfgBtn">Import .json</button>
+        </div>
+        <input type="file" id="importCfgFile" accept=".json,application/json" style="display:none;">
+      </div>
+    </section>
+
+    <div class="col-resize" id="colResize" role="separator" aria-label="Resize side panel" title="Drag to resize side panel"></div>
+
+    <!-- RIGHT COLUMN -->
+    <section class="col-right">
+      <div class="results-bar">
+        <div class="view-toggle">
+          <button data-view="table" class="active" id="viewTableBtn">Table</button>
+          <button data-view="json" id="viewJsonBtn">Raw JSON</button>
+        </div>
+        <div class="spacer"></div>
+        <button class="ghost xs" id="copyResultsBtn">Copy</button>
+        <button class="ghost xs" id="downloadResultsBtn">Download</button>
+      </div>
+
+      <div class="results-body" id="resultsBody">
+        <div class="empty-state">
+          <b>No data yet</b>
+          <div>Load or paste JSON on the left to get started.</div>
+        </div>
+      </div>
+
+      <div class="pager" id="pager" style="display:none;">
+        <span id="pagerInfo">0–0 of 0</span>
+        <div class="spacer"></div>
+        <label for="pageSizeSel" style="margin-right:4px;">rows/page</label>
+        <select id="pageSizeSel">
+          <option>25</option><option selected>50</option><option>100</option><option>250</option><option>500</option>
+        </select>
+        <button class="ghost xs icon-btn" id="prevPageBtn">◂ prev</button>
+        <span id="pageNumLabel">1 / 1</span>
+        <button class="ghost xs icon-btn" id="nextPageBtn">next ▸</button>
+      </div>
+
+      <div class="jqbox">
+        <div class="jqhead">
+          <b>Equivalent jq command</b>
+          <div class="spacer"></div>
+          <button class="ghost xs" id="copyJqBtn">Copy</button>
+        </div>
+        <pre id="jqOutput">jq '.'</pre>
+        <div class="note" id="jqNote"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="modal-back" id="cellModal">
+  <div class="modal">
+    <div class="mhead"><b>Value</b><button class="ghost xs" id="closeCellModal">Close</button></div>
+    <div class="mbody"><pre id="cellModalBody"></pre></div>
+  </div>
+</div>
+
+<div class="modal-back" id="editorModal">
+  <div class="modal modal-wide">
+    <div class="mhead"><b>Edit JSON</b><button class="ghost xs" id="closeEditorModal">Close</button></div>
+    <div class="mbody">
+      <textarea id="jsonEditorExpanded" class="json-editor-expanded" spellcheck="false" placeholder="Load JSON first, then edit it here…"></textarea>
+    </div>
+    <div class="mfoot">
+      <button class="ghost xs" id="formatJsonBtnX">Format</button>
+      <button class="ghost xs" id="validateJsonBtnX">Validate</button>
+      <button class="primary xs" id="applyJsonBtnX">Apply Changes</button>
+      <button class="ghost xs" id="saveJsonBtnX">Save JSON</button>
+      <div class="spacer"></div>
+      <div class="status-line" id="editStatusX"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ======================= STATE ======================= */
+  const state = {
+    rawData: null,
+    rootPath: "",
+    rows: [],            // rows after resolving root path
+    search: "",
+    filters: [],          // {id, field, operator, value, join, negated}
+    sorts: [],             // {id, field, dir}
+    offset: 0,
+    limit: null,
+    columns: [],            // {id, name, path}
+    view: "table",
+    pageSize: 50,
+    page: 1,
+    queryResult: [],          // final projected result (after limit/offset/columns)
+    matchCount: 0,              // count after filters, before limit/offset
+    treeExpanded: new Set(["root"]),
+    columnWidths: {},
+    sourceFileName: "data.json",
+    sidebarWidth: 300,
+  };
+  let idSeq = 1;
+  const nextId = () => "id" + (idSeq++);
+
+  const STATE_STORAGE_KEY = "jqbench_state_v1";
+  function serializeWorkbenchState(){
+    return {rawData:state.rawData,rootPath:state.rootPath,search:state.search,filters:state.filters.map(({id,...x})=>x),sorts:state.sorts.map(({id,...x})=>x),offset:state.offset,limit:state.limit,columns:state.columns.map(({id,...x})=>x),view:state.view,pageSize:state.pageSize,page:state.page,treeExpanded:Array.from(state.treeExpanded),columnWidths:state.columnWidths,jsonInput:$("#jsonInput")?.value||"",sourceFileName:state.sourceFileName||"data.json",sidebarWidth:state.sidebarWidth||300};
+  }
+  function saveWorkbenchState(){try{localStorage.setItem(STATE_STORAGE_KEY,JSON.stringify(serializeWorkbenchState()));}catch(e){}}
+  function updateViewButtons(){
+    $("#viewTableBtn").classList.toggle("active",state.view==="table");
+    $("#viewJsonBtn").classList.toggle("active",state.view==="json");
+  }
+  function restoreWorkbenchState(){
+    try{
+      const raw=localStorage.getItem(STATE_STORAGE_KEY); if(!raw) return false;
+      const cfg=JSON.parse(raw);
+      state.rawData=cfg.rawData??null; state.rootPath=cfg.rootPath||""; state.search=cfg.search||"";
+      state.filters=(cfg.filters||[]).map(f=>({id:nextId(),join:"AND",negated:false,operator:"=",value:"",field:"",...f, ...(f.join === "NOT" ? {join:"AND",negated:true} : {})}));
+      state.sorts=(cfg.sorts||[]).map(x=>({id:nextId(),dir:"asc",field:"",...x}));
+      state.offset=cfg.offset||0; state.limit=cfg.limit??null;
+      state.columns=(cfg.columns||[]).map(c=>({id:nextId(),name:"",path:"",...c}));
+      state.view=cfg.view==="json"?"json":"table"; state.pageSize=[25,50,100,250,500].includes(Number(cfg.pageSize))?Number(cfg.pageSize):50; state.page=Math.max(1,parseInt(cfg.page,10)||1);
+      state.treeExpanded=new Set(Array.isArray(cfg.treeExpanded)?cfg.treeExpanded:["root"]);
+      state.columnWidths=(cfg.columnWidths && typeof cfg.columnWidths === "object") ? cfg.columnWidths : {}; state.sourceFileName=cfg.sourceFileName||"data.json"; state.sidebarWidth=Math.max(240,Math.min(600,parseInt(cfg.sidebarWidth,10)||300)); document.documentElement.style.setProperty("--sidebar-width",state.sidebarWidth+"px");
+      $("#jsonInput").value=cfg.jsonInput||(state.rawData!=null?JSON.stringify(state.rawData,null,2):""); $("#jsonEditor").value=cfg.jsonInput||(state.rawData!=null?JSON.stringify(state.rawData,null,2):""); $("#rootPathInput").value=state.rootPath; $("#searchInput").value=state.search; $("#offsetInput").value=state.offset||0; $("#limitInput").value=state.limit??""; $("#pageSizeSel").value=String(state.pageSize);
+      if(state.rawData){const el=$("#loadStatus");el.className="status-line ok";el.textContent=`✓ Restored — top level is ${Array.isArray(state.rawData)?`array (${state.rawData.length} items)`:typeof state.rawData}`;applyRootPath();renderTree();}
+      renderFilters();renderSorts();renderColumns();updateViewButtons();return true;
+    }catch(e){return false;}
+  }
+
+  const $ = (sel, root) => (root||document).querySelector(sel);
+  const $all = (sel, root) => Array.from((root||document).querySelectorAll(sel));
+
+  function toast(msg){
+    const t = $("#toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(()=> t.classList.remove("show"), 1600);
+  }
+
+  function debounce(fn, ms){
+    let h;
+    return function(...args){ clearTimeout(h); h = setTimeout(()=>fn.apply(this,args), ms); };
+  }
+
+  /* ======================= PATH ENGINE ======================= */
+  const pathTokenCache = new Map();
+  function tokenizePath(path){
+    if(pathTokenCache.has(path)) return pathTokenCache.get(path);
+    const tokens = [];
+    let i = 0;
+    while(i < path.length){
+      const c = path[i];
+      if(c === "."){ i++; continue; }
+      if(c === "["){
+        let j = path.indexOf("]", i);
+        if(j === -1) j = path.length;
+        const inner = path.slice(i+1, j).trim();
+        if(inner === ""){ tokens.push({t:"wild"}); }
+        else if(/^-?\d+$/.test(inner)){ tokens.push({t:"idx", v: parseInt(inner,10)}); }
+        else { tokens.push({t:"key", v: inner.replace(/^["']|["']$/g,"")}); }
+        i = j+1;
+      } else {
+        let j = i;
+        while(j < path.length && path[j] !== "." && path[j] !== "[") j++;
+        const seg = path.slice(i,j);
+        if(seg.length) tokens.push({t:"key", v: seg});
+        i = j;
+      }
+    }
+    pathTokenCache.set(path, tokens);
+    return tokens;
+  }
+
+  function evalTokens(value, tokens, idx){
+    if(idx >= tokens.length) return value;
+    if(value === undefined || value === null) return undefined;
+    const tok = tokens[idx];
+    if(tok.t === "wild"){
+      if(!Array.isArray(value)) return undefined;
+      return value.map(v => evalTokens(v, tokens, idx+1));
+    }
+    if(tok.t === "idx"){
+      if(!Array.isArray(value)) return undefined;
+      const i = tok.v < 0 ? value.length + tok.v : tok.v;
+      return evalTokens(value[i], tokens, idx+1);
+    }
+    if(typeof value !== "object") return undefined;
+    return evalTokens(value[tok.v], tokens, idx+1);
+  }
+
+  function getPath(obj, path){
+    if(!path) return obj;
+    const tokens = tokenizePath(path);
+    if(tokens.length === 0) return obj;
+    return evalTokens(obj, tokens, 0);
+  }
+
+  /* ======================= LOAD ======================= */
+  function loadJsonText(text){
+    const statusEl = $("#loadStatus");
+    try{
+      const parsed = JSON.parse(text);
+      state.rawData = parsed;
+      $("#jsonEditor").value = JSON.stringify(parsed, null, 2);
+      $("#editStatus").className = "status-line ok"; $("#editStatus").textContent = "✓ Valid JSON";
+      statusEl.className = "status-line ok";
+      const kind = Array.isArray(parsed) ? `array (${parsed.length} items)` : typeof parsed;
+      statusEl.textContent = `✓ Loaded — top level is ${kind}`;
+      applyRootPath();
+      renderTree();
+      runQuery();
+      saveWorkbenchState();
+      toast("JSON loaded");
+    }catch(e){
+      statusEl.className = "status-line err";
+      statusEl.textContent = "✗ Parse error: " + e.message;
+    }
+  }
+
+  function applyRootPath(){
+    const p = state.rootPath.trim();
+    let rows;
+    if(!p){
+      rows = Array.isArray(state.rawData) ? state.rawData : (state.rawData == null ? [] : [state.rawData]);
+    } else {
+      const v = getPath(state.rawData, p);
+      if(Array.isArray(v)) rows = v;
+      else if(v === undefined) { rows = []; toast("Root path not found"); }
+      else rows = [v];
+    }
+    state.rows = rows;
+    updateRowcountBadge();
+  }
+
+  function updateRowcountBadge(){
+    const el = $("#rowcountBadge");
+    if(!state.rawData){ el.textContent = "no data loaded"; return; }
+    el.innerHTML = `<b>${state.rows.length}</b> rows loaded &nbsp;·&nbsp; <b>${state.matchCount}</b> match`;
+  }
+
+  const SAMPLE = {
+    company: "Nimbus Media",
+    videos: [
+      {id: 1, title: "Intro to Streams", channel: "TechFlow", durationSeconds: 812, views: 15234, tags: ["tech","tutorial"], published: "2024-01-12", stats: {likes: 900, dislikes: 12}},
+      {id: 2, title: "Deep Dive: Buffers", channel: "TechFlow", durationSeconds: 1502, views: 8452, tags: ["tech","advanced"], published: "2024-02-03", stats: {likes: 640, dislikes: 30}},
+      {id: 3, title: "Cooking Pasta Right", channel: "ChefLane", durationSeconds: 421, views: 98213, tags: ["food"], published: "2023-11-20", stats: {likes: 5100, dislikes: 90}},
+      {id: 4, title: "Night Hike Vlog", channel: "WildPaths", durationSeconds: 903, views: null, tags: ["outdoors","vlog"], published: "2024-03-01", stats: {likes: 210, dislikes: 4}},
+      {id: 5, title: "Guitar Basics Ep 1", channel: "SixStrings", durationSeconds: 655, views: 44210, tags: ["music","tutorial"], published: "2023-09-15", stats: {likes: 3021, dislikes: 55}},
+      {id: 6, title: "Guitar Basics Ep 2", channel: "SixStrings", durationSeconds: 701, views: 39012, tags: ["music","tutorial"], published: "2023-09-22", stats: {likes: 2790, dislikes: 41}},
+      {id: 7, title: "Pasta Sauces 101", channel: "ChefLane", durationSeconds: 388, views: 61233, tags: ["food","basics"], published: "2024-01-05", stats: {likes: 3400, dislikes: 20}}
+    ]
+  };
+
+  /* ======================= TREE VIEW ======================= */
+  function typeLabel(v){
+    if(v === null) return "null";
+    if(Array.isArray(v)) return "array";
+    return typeof v;
+  }
+
+  function renderValInline(v){
+    if(v === null) return `<span class="tval-null">null</span>`;
+    if(typeof v === "string") return `<span class="tval-string">"${escapeHtml(v.length>60? v.slice(0,60)+"…":v)}"</span>`;
+    if(typeof v === "number") return `<span class="tval-number">${v}</span>`;
+    if(typeof v === "boolean") return `<span class="tval-bool">${v}</span>`;
+    return "";
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
+  function buildTreeNode(key, value, path, isRoot, filterText){
+    const container = document.createElement("div");
+    container.className = "tnode" + (isRoot ? " root" : "");
+    const isContainer = value !== null && typeof value === "object";
+    const line = document.createElement("div");
+    line.className = "tline";
+
+    const caret = document.createElement("span");
+    caret.className = "tcaret";
+    caret.textContent = isContainer ? (state.treeExpanded.has(path) ? "▾" : "▸") : "";
+    line.appendChild(caret);
+
+    const keySpan = document.createElement("span");
+    keySpan.className = "tkey" + (typeof key === "number" ? " arridx" : "");
+    keySpan.textContent = (key === null ? "" : key);
+    if(key !== null){ line.appendChild(keySpan); line.appendChild(Object.assign(document.createElement("span"),{className:"tpunc",textContent:": "})); }
+
+    if(isContainer){
+      const count = Array.isArray(value) ? value.length : Object.keys(value).length;
+      const meta = document.createElement("span");
+      meta.className = "tmeta";
+      meta.textContent = (Array.isArray(value) ? `Array(${count})` : `Object(${count})`);
+      line.appendChild(meta);
+    } else {
+      const span = document.createElement("span");
+      span.innerHTML = renderValInline(value);
+      line.appendChild(span);
+    }
+
+    const copyBtn = document.createElement("span");
+    copyBtn.className = "tpath-copy";
+    copyBtn.textContent = "copy path";
+    copyBtn.title = path || "(root)";
+    copyBtn.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      navigator.clipboard.writeText(path).then(()=> toast("Copied: " + (path || "(root)")));
+    });
+    line.appendChild(copyBtn);
+
+    container.appendChild(line);
+
+    if(isContainer){
+      const childWrap = document.createElement("div");
+      childWrap.style.display = state.treeExpanded.has(path) ? "block" : "none";
+      line.addEventListener("click", ()=>{
+        const open = state.treeExpanded.has(path);
+        if(open){ state.treeExpanded.delete(path); childWrap.style.display = "none"; caret.textContent = "▸"; }
+        else { state.treeExpanded.add(path); childWrap.style.display = "block"; caret.textContent = "▾"; renderChildren(); }
+      });
+      let childrenBuilt = false;
+      function renderChildren(){
+        if(childrenBuilt) return;
+        childrenBuilt = true;
+        const entries = Array.isArray(value) ? value.map((v,i)=>[i,v]) : Object.entries(value);
+        entries.forEach(([k,v])=>{
+          const childPath = path ? (Array.isArray(value) ? `${path}[${k}]` : `${path}.${k}`) : (Array.isArray(value) ? `[${k}]` : `${k}`);
+          childWrap.appendChild(buildTreeNode(k, v, childPath, false, filterText));
+        });
+      }
+      if(state.treeExpanded.has(path)) renderChildren();
+      container.appendChild(childWrap);
+    }
+    return container;
+  }
+
+  function renderTree(){
+    const root = $("#treeRoot");
+    root.innerHTML = "";
+    if(state.rawData == null){
+      root.innerHTML = `<div class="empty-note">Load JSON to browse its structure.</div>`;
+      return;
+    }
+    root.appendChild(buildTreeNode(null, state.rawData, "", true, ""));
+  }
+
+  /* ======================= FILTER / SORT UI STATE ======================= */
+  const OPERATORS = [
+    {v:"=", l:"= equals"},
+    {v:"!=", l:"≠ not equals"},
+    {v:"contains", l:"contains"},
+    {v:"startsWith", l:"starts with"},
+    {v:"endsWith", l:"ends with"},
+    {v:"regex", l:"regex match"},
+    {v:">", l:"> greater"},
+    {v:"<", l:"< less"},
+    {v:">=", l:"≥ gte"},
+    {v:"<=", l:"≤ lte"},
+    {v:"exists", l:"exists"},
+    {v:"isnull", l:"is null"},
+  ];
+  const NO_VALUE_OPS = new Set(["exists","isnull"]);
+
+  function addFilter(){
+    state.filters.push({id: nextId(), field:"", operator:"=", value:"", join:"AND", negated:false});
+    renderFilters();
+  }
+  function addSort(){
+    state.sorts.push({id: nextId(), field:"", dir:"asc"});
+    renderSorts();
+  }
+  function addColumn(name, path){
+    state.columns.push({id: nextId(), name: name||"", path: path||""});
+    renderColumns();
+  }
+
+  function renderFilters(){
+    const list = $("#filterList");
+    list.innerHTML = "";
+    if(state.filters.length === 0){
+      list.innerHTML = `<div class="empty-note">No filters. Results = all rows (minus search).</div>`;
+      return;
+    }
+    state.filters.forEach((f, i) => {
+      const row = document.createElement("div");
+      row.className = "cond-row";
+
+      if(i === 0){
+        // The first condition has no AND/OR connector, but it can be negated independently.
+        const notBtn = document.createElement("button");
+        notBtn.className = "cond-join";
+        notBtn.textContent = f.negated ? "NOT" : "—";
+        notBtn.title = f.negated ? "First condition is negated. Click to remove NOT." : "Click to apply NOT to the first condition.";
+        notBtn.addEventListener("click", ()=>{
+          f.negated = !f.negated;
+          notBtn.textContent = f.negated ? "NOT" : "—";
+          notBtn.title = f.negated ? "First condition is negated. Click to remove NOT." : "Click to apply NOT to the first condition.";
+          scheduleRun();
+          saveWorkbenchState();
+        });
+        row.appendChild(notBtn);
+      } else {
+        // Later conditions have two independent controls: AND/OR and a separate NOT toggle.
+        if(!["AND","OR"].includes(f.join)) f.join = "AND";
+
+        const controls = document.createElement("div");
+        controls.style.display = "flex";
+        controls.style.gap = "4px";
+
+        const joinBtn = document.createElement("button");
+        joinBtn.className = "cond-join";
+        joinBtn.textContent = f.join;
+        joinBtn.title = "Click to switch between AND and OR.";
+        joinBtn.addEventListener("click", ()=>{
+          f.join = f.join === "AND" ? "OR" : "AND";
+          joinBtn.textContent = f.join;
+          scheduleRun();
+          saveWorkbenchState();
+        });
+
+        const notBtn = document.createElement("button");
+        notBtn.className = "cond-join";
+        notBtn.textContent = f.negated ? "NOT" : "—";
+        notBtn.title = f.negated ? "This condition is negated. Click to remove NOT." : "Click to apply NOT to this condition.";
+        notBtn.addEventListener("click", ()=>{
+          f.negated = !f.negated;
+          notBtn.textContent = f.negated ? "NOT" : "—";
+          notBtn.title = f.negated ? "This condition is negated. Click to remove NOT." : "Click to apply NOT to this condition.";
+          scheduleRun();
+          saveWorkbenchState();
+        });
+
+        controls.appendChild(joinBtn);
+        controls.appendChild(notBtn);
+        row.appendChild(controls);
+      }
+
+      const fields = document.createElement("div");
+      fields.className = "cond-fields";
+
+      const fieldInput = document.createElement("input");
+      fieldInput.type = "text";
+      fieldInput.placeholder = "field path e.g. stats.likes";
+      fieldInput.value = f.field;
+      fieldInput.addEventListener("input", ()=>{ f.field = fieldInput.value; scheduleRun(); saveWorkbenchState(); });
+
+      const opSelect = document.createElement("select");
+      OPERATORS.forEach(o => {
+        const opt = document.createElement("option");
+        opt.value = o.v; opt.textContent = o.l;
+        if(o.v === f.operator) opt.selected = true;
+        opSelect.appendChild(opt);
+      });
+      opSelect.addEventListener("change", ()=>{ f.operator = opSelect.value; renderFilters(); scheduleRun(); saveWorkbenchState(); saveWorkbenchState(); });
+
+      fields.appendChild(fieldInput);
+      fields.appendChild(opSelect);
+      row.appendChild(fields);
+
+      if(!NO_VALUE_OPS.has(f.operator)){
+        const valInput = document.createElement("input");
+        valInput.type = "text";
+        valInput.placeholder = "value";
+        valInput.value = f.value;
+        valInput.addEventListener("input", ()=>{ f.value = valInput.value; scheduleRun(); saveWorkbenchState(); });
+        row.appendChild(valInput);
+      }
+
+      const foot = document.createElement("div");
+      foot.className = "cond-foot";
+      const rmBtn = document.createElement("button");
+      rmBtn.className = "xs ghost";
+      rmBtn.textContent = "Remove";
+      rmBtn.addEventListener("click", ()=>{ state.filters = state.filters.filter(x=>x.id!==f.id); renderFilters(); scheduleRun(); saveWorkbenchState(); saveWorkbenchState(); });
+      foot.appendChild(rmBtn);
+      row.appendChild(foot);
+
+      list.appendChild(row);
+    });
+  }
+
+  function renderSorts(){
+    const list = $("#sortList");
+    list.innerHTML = "";
+    if(state.sorts.length === 0){
+      list.innerHTML = `<div class="empty-note">No sort applied — original order kept.</div>`;
+      return;
+    }
+    state.sorts.forEach((s, i) => {
+      const row = document.createElement("div");
+      row.className = "sort-row";
+      const badge = document.createElement("span");
+      badge.className = "sort-badge";
+      badge.textContent = i+1;
+      row.appendChild(badge);
+
+      const fieldInput = document.createElement("input");
+      fieldInput.type = "text";
+      fieldInput.className = "grow";
+      fieldInput.placeholder = "field path";
+      fieldInput.value = s.field;
+      fieldInput.addEventListener("input", ()=>{ s.field = fieldInput.value; scheduleRun(); saveWorkbenchState(); });
+      row.appendChild(fieldInput);
+
+      const dirSelect = document.createElement("select");
+      dirSelect.style.width = "auto";
+      ["asc","desc"].forEach(d=>{
+        const opt = document.createElement("option");
+        opt.value = d; opt.textContent = d === "asc" ? "▲ asc" : "▼ desc";
+        if(d === s.dir) opt.selected = true;
+        dirSelect.appendChild(opt);
+      });
+      dirSelect.addEventListener("change", ()=>{ s.dir = dirSelect.value; scheduleRun(); saveWorkbenchState(); });
+      row.appendChild(dirSelect);
+
+      const upBtn = document.createElement("button");
+      upBtn.className = "xs ghost icon-btn"; upBtn.textContent = "↑";
+      upBtn.disabled = i === 0;
+      upBtn.addEventListener("click", ()=>{ [state.sorts[i-1], state.sorts[i]] = [state.sorts[i], state.sorts[i-1]]; renderSorts(); scheduleRun(); saveWorkbenchState(); saveWorkbenchState(); });
+      row.appendChild(upBtn);
+
+      const downBtn = document.createElement("button");
+      downBtn.className = "xs ghost icon-btn"; downBtn.textContent = "↓";
+      downBtn.disabled = i === state.sorts.length-1;
+      downBtn.addEventListener("click", ()=>{ [state.sorts[i+1], state.sorts[i]] = [state.sorts[i], state.sorts[i+1]]; renderSorts(); scheduleRun(); saveWorkbenchState(); saveWorkbenchState(); });
+      row.appendChild(downBtn);
+
+      const rmBtn = document.createElement("button");
+      rmBtn.className = "xs ghost"; rmBtn.textContent = "✕";
+      rmBtn.addEventListener("click", ()=>{ state.sorts = state.sorts.filter(x=>x.id!==s.id); renderSorts(); scheduleRun(); saveWorkbenchState(); saveWorkbenchState(); });
+      row.appendChild(rmBtn);
+
+      list.appendChild(row);
+    });
+  }
+
+  function renderColumns(){
+    const list = $("#colList");
+    list.innerHTML = "";
+    if(state.columns.length === 0){
+      list.innerHTML = `<div class="empty-note">No columns defined — showing every top-level field.</div>`;
+      return;
+    }
+    state.columns.forEach(c => {
+      const row = document.createElement("div");
+      row.className = "col-chip-row";
+
+      const nameInput = document.createElement("input");
+      nameInput.type = "text"; nameInput.className = "colname";
+      nameInput.placeholder = "label"; nameInput.value = c.name;
+      nameInput.addEventListener("input", ()=>{ c.name = nameInput.value; scheduleRun(); saveWorkbenchState(); });
+
+      const pathInput = document.createElement("input");
+      pathInput.type = "text"; pathInput.className = "grow";
+      pathInput.placeholder = "path e.g. videos[].title"; pathInput.value = c.path;
+      pathInput.addEventListener("input", ()=>{ c.path = pathInput.value; scheduleRun(); saveWorkbenchState(); });
+
+      const rmBtn = document.createElement("button");
+      rmBtn.className = "xs ghost"; rmBtn.textContent = "✕";
+      rmBtn.addEventListener("click", ()=>{ state.columns = state.columns.filter(x=>x.id!==c.id); renderColumns(); scheduleRun(); saveWorkbenchState(); saveWorkbenchState(); });
+
+      row.appendChild(nameInput);
+      row.appendChild(pathInput);
+      row.appendChild(rmBtn);
+      list.appendChild(row);
+    });
+  }
+
+  function detectColumns(){
+    if(!state.rows.length){ toast("No rows to detect from"); return; }
+    const keys = new Set();
+    const sampleN = Math.min(state.rows.length, 300);
+    for(let i=0;i<sampleN;i++){
+      const r = state.rows[i];
+      if(r && typeof r === "object" && !Array.isArray(r)) Object.keys(r).forEach(k=>keys.add(k));
+    }
+    state.columns = Array.from(keys).map(k => ({id: nextId(), name: k, path: k}));
+    renderColumns();
+    scheduleRun();
+    toast(`Detected ${state.columns.length} columns`);
+  }
+
+  /* ======================= QUERY EXECUTION ======================= */
+  function isNumericLike(v){
+    if(typeof v === "number") return isFinite(v);
+    if(typeof v !== "string" || v.trim() === "") return false;
+    return isFinite(Number(v));
+  }
+  function isoDateValue(v){
+    if(typeof v!=="string") return null; const s=v.trim();
+    if(!/^\d{4}-\d{2}-\d{2}(?:[Tt]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:[Zz]|[+-]\d{2}:?\d{2})?)?$/.test(s)) return null;
+    const t=Date.parse(s); return Number.isNaN(t)?null:t;
+  }
+  function bothIsoDates(a,b){return isoDateValue(a)!==null&&isoDateValue(b)!==null;}
+
+  function testSingle(val, op, target){
+    switch(op){
+      case "exists": return val !== undefined;
+      case "isnull": return val === null || val === undefined;
+      case "=": {
+        if(bothIsoDates(val,target)) return isoDateValue(val)===isoDateValue(target);
+        if(isNumericLike(val)&&isNumericLike(target)) return Number(val)===Number(target);
+        return String(val)===String(target);
+      }
+      case "!=": {
+        if(bothIsoDates(val,target)) return isoDateValue(val)!==isoDateValue(target);
+        if(isNumericLike(val)&&isNumericLike(target)) return Number(val)!==Number(target);
+        return String(val)!==String(target);
+      }
+      case "contains":
+        if(val === undefined || val === null) return false;
+        return String(val).toLowerCase().includes(String(target).toLowerCase());
+      case "startsWith":
+        if(val === undefined || val === null) return false;
+        return String(val).toLowerCase().startsWith(String(target).toLowerCase());
+      case "endsWith":
+        if(val === undefined || val === null) return false;
+        return String(val).toLowerCase().endsWith(String(target).toLowerCase());
+      case "regex":
+        if(val === undefined || val === null) return false;
+        try{ return new RegExp(target).test(String(val)); }catch(e){ return false; }
+      case ">": if(bothIsoDates(val,target)) return isoDateValue(val)>isoDateValue(target); return isNumericLike(val)&&isNumericLike(target)&&Number(val)>Number(target);
+      case "<": if(bothIsoDates(val,target)) return isoDateValue(val)<isoDateValue(target); return isNumericLike(val)&&isNumericLike(target)&&Number(val)<Number(target);
+      case ">=": if(bothIsoDates(val,target)) return isoDateValue(val)>=isoDateValue(target); return isNumericLike(val)&&isNumericLike(target)&&Number(val)>=Number(target);
+      case "<=": if(bothIsoDates(val,target)) return isoDateValue(val)<=isoDateValue(target); return isNumericLike(val)&&isNumericLike(target)&&Number(val)<=Number(target);
+      default: return true;
+    }
+  }
+
+  function testValue(val, op, target){
+    if(Array.isArray(val)){
+      if(op === "exists") return val.length > 0 || val.some(v=>v!==undefined);
+      return val.some(v => testValue(v, op, target));
+    }
+    return testSingle(val, op, target);
+  }
+
+  function testCondition(row, cond){
+    if(!cond.field) return true;
+    const val = getPath(row, cond.field);
+    return testValue(val, cond.operator, cond.value);
+  }
+
+  function rowMatchesFilters(row){
+    const active = state.filters.filter(f => f.field && f.field.trim());
+    if(active.length === 0) return true;
+    const first = testCondition(row, active[0]);
+    let result = active[0].negated ? !first : first;
+    for(let i=1;i<active.length;i++){
+      const c = active[i];
+      const r = c.negated ? !testCondition(row, c) : testCondition(row, c);
+      result = c.join === "OR" ? (result || r) : (result && r);
+    }
+    return result;
+  }
+
+  let stringifyCache = new WeakMap();
+  function rowMatchesSearch(row){
+    if(!state.search) return true;
+    let s;
+    if(row && typeof row === "object"){
+      s = stringifyCache.get(row);
+      if(s === undefined){ s = JSON.stringify(row).toLowerCase(); stringifyCache.set(row, s); }
+    } else {
+      s = String(row).toLowerCase();
+    }
+    return s.includes(state.search.toLowerCase());
+  }
+
+  function compareValues(a, b){
+    const aNull = a === undefined || a === null;
+    const bNull = b === undefined || b === null;
+    if(aNull && bNull) return 0;
+    if(aNull) return 1;
+    if(bNull) return -1;
+    if(bothIsoDates(a,b)) return isoDateValue(a)-isoDateValue(b);
+    if(isNumericLike(a) && isNumericLike(b)) return Number(a) - Number(b);
+    if(typeof a === "boolean" && typeof b === "boolean") return (a===b)?0:(a? 1 : -1);
+    return String(a).localeCompare(String(b));
+  }
+
+  function compareRows(a, b){
+    for(const s of state.sorts){
+      if(!s.field) continue;
+      const va = getPath(a, s.field), vb = getPath(b, s.field);
+      let cmp = compareValues(Array.isArray(va)? va[0]: va, Array.isArray(vb)? vb[0]: vb);
+      if(cmp !== 0) return s.dir === "desc" ? -cmp : cmp;
+    }
+    return 0;
+  }
+
+  function projectRow(row){
+    if(state.columns.length === 0) return row;
+    const out = {};
+    state.columns.forEach(c => {
+      if(!c.path) return;
+      const key = c.name && c.name.trim() ? c.name.trim() : c.path;
+      out[key] = getPath(row, c.path);
+    });
+    return out;
+  }
+
+  function runQuery(){
+    if(!state.rawData){ renderResults(); renderJq(); updateRowcountBadge(); return; }
+    const filtered = state.rows.filter(r => rowMatchesSearch(r) && rowMatchesFilters(r));
+    state.matchCount = filtered.length;
+    const sorted = state.sorts.some(s=>s.field) ? filtered.slice().sort(compareRows) : filtered;
+    const off = Math.max(0, parseInt(state.offset,10) || 0);
+    const lim = (state.limit === null || state.limit === "" || isNaN(parseInt(state.limit,10))) ? undefined : parseInt(state.limit,10);
+    const sliced = lim !== undefined ? sorted.slice(off, off+lim) : sorted.slice(off);
+    state.queryResult = sliced.map(projectRow);
+    state.page = 1;
+    updateRowcountBadge();
+    renderResults();
+    renderJq();
+  }
+  const scheduleRun = debounce(runQuery, 180);
+
+  /* ======================= RESULTS: TABLE ======================= */
+  function detectDisplayColumns(){
+    if(state.columns.length > 0) return state.columns.map(c => c.name && c.name.trim() ? c.name.trim() : c.path);
+    const cols = new Set();
+    const n = Math.min(state.queryResult.length, 200);
+    for(let i=0;i<n;i++){
+      const r = state.queryResult[i];
+      if(r && typeof r === "object" && !Array.isArray(r)) Object.keys(r).forEach(k=>cols.add(k));
+    }
+    return Array.from(cols);
+  }
+
+  function isUrlString(v){
+    if(typeof v !== "string") return false;
+    const s = v.trim();
+    return /^(?:https?:\/\/|www\.)\S+$/i.test(s);
+  }
+
+  function hyperlinkUrl(v){
+    const text = String(v);
+    const href = /^www\./i.test(text.trim()) ? "https://" + text.trim() : text.trim();
+    return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="cell-link">${escapeHtml(text)}</a>`;
+  }
+  function formatCell(v){
+    if(v === undefined) return {html:`<span class="cell-null">—</span>`, plain:""};
+    if(v === null) return {html:`<span class="cell-null">null</span>`, plain:"null"};
+    if(typeof v === "object"){
+      const s = JSON.stringify(v);
+      return {html:`<span class="cell-obj" data-full='${escapeHtml(JSON.stringify(v))}'>${escapeHtml(s.length>70? s.slice(0,70)+"…" : s)}</span>`, plain:s, isObj:true};
+    }
+    if(isUrlString(v)){
+      return {html: hyperlinkUrl(v), plain: String(v), isLink:true};
+    }
+    return {html: escapeHtml(String(v)), plain: String(v)};
+  }
+
+  function renderTableView(){
+    const body = $("#resultsBody");
+    if(state.queryResult.length === 0){
+      body.innerHTML = `<div class="empty-state"><b>No matching rows</b><div>Try adjusting filters or search.</div></div>`;
+      $("#pager").style.display = "none";
+      return;
+    }
+    const cols = detectDisplayColumns();
+    const totalPages = Math.max(1, Math.ceil(state.queryResult.length / state.pageSize));
+    state.page = Math.min(state.page, totalPages);
+    const start = (state.page-1) * state.pageSize;
+    const pageRows = state.queryResult.slice(start, start+state.pageSize);
+
+    const widthFor = key => {
+      const w = Number(state.columnWidths[key]);
+      return Number.isFinite(w) && w >= 50 ? w : null;
+    };
+    const colWidthStyle = key => {
+      const w = widthFor(key);
+      return w ? ` style="width:${w}px;min-width:${w}px;max-width:${w}px;"` : "";
+    };
+    let html = `<table class="rtable"><colgroup><col${colWidthStyle("#")}>${cols.map(c => `<col${colWidthStyle(c)}>`).join("")}</colgroup><thead><tr><th style="cursor:default;position:relative;"${colWidthStyle("#")}>#<span class="col-resizer" data-resize-col="#"></span></th>`;
+    cols.forEach(c => html += `<th data-col="${escapeHtml(c)}" title="Click to sort by this field" style="position:relative;${widthFor(c)?`width:${widthFor(c)}px;min-width:${widthFor(c)}px;max-width:${widthFor(c)}px;`:""}">${escapeHtml(c)}<span class="col-resizer" data-resize-col="${escapeHtml(c)}"></span></th>`);
+    html += `</tr></thead><tbody>`;
+    pageRows.forEach((row, i) => {
+      html += `<tr><td class="idxcol">${start+i+1}</td>`;
+      cols.forEach(c => {
+        const v = (row && typeof row === "object" && !Array.isArray(row)) ? row[c] : (cols.length===1 ? row : undefined);
+        const f = formatCell(v);
+        html += `<td title="${f.isObj?'click to expand':''}">${f.html}</td>`;
+      });
+      html += `</tr>`;
+    });
+    html += `</tbody></table>`;
+    body.innerHTML = html;
+
+    $all(".col-resizer", body).forEach(resizer => {
+      resizer.addEventListener("click", e => e.stopPropagation());
+      resizer.addEventListener("mousedown", e => {
+        e.preventDefault();
+        e.stopPropagation();
+        const th = resizer.parentElement;
+        const key = resizer.getAttribute("data-resize-col");
+        const startX = e.clientX;
+        const startWidth = th.getBoundingClientRect().width;
+        resizer.classList.add("dragging");
+        const onMove = ev => {
+          const width = Math.max(50, Math.round(startWidth + ev.clientX - startX));
+          state.columnWidths[key] = width;
+          th.style.width = `${width}px`;
+          th.style.minWidth = `${width}px`;
+          th.style.maxWidth = `${width}px`;
+          const table = th.closest("table");
+          const idx = Array.from(th.parentElement.children).indexOf(th);
+          const col = table.querySelector(`colgroup col:nth-child(${idx + 1})`);
+          if(col) { col.style.width = `${width}px`; col.style.minWidth = `${width}px`; col.style.maxWidth = `${width}px`; }
+        };
+        const onUp = () => {
+          resizer.classList.remove("dragging");
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          saveWorkbenchState();
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+    });
+
+    $all(".cell-obj", body).forEach(el => {
+      el.addEventListener("click", ()=>{
+        try{
+          const data = JSON.parse(el.getAttribute("data-full"));
+          openCellModal(data);
+        }catch(e){}
+      });
+    });
+    $all("th[data-col]", body).forEach(th => {
+      th.addEventListener("click", ()=>{
+        const col = th.getAttribute("data-col");
+        // map display col back to a path: prefer defined column path, else use col name as path
+        let path = col;
+        const defined = state.columns.find(c => (c.name && c.name.trim() ? c.name.trim() : c.path) === col);
+        if(defined) path = defined.path;
+        const existing = state.sorts.find(s => s.field === path);
+        if(existing){
+          existing.dir = existing.dir === "asc" ? "desc" : "asc";
+        } else {
+          state.sorts = [{id: nextId(), field: path, dir:"asc"}];
+        }
+        renderSorts();
+        runQuery();
+      });
+    });
+
+    $("#pager").style.display = "flex";
+    $("#pagerInfo").textContent = `${state.queryResult.length ? start+1 : 0}–${Math.min(start+state.pageSize, state.queryResult.length)} of ${state.queryResult.length}`;
+    $("#pageNumLabel").textContent = `${state.page} / ${totalPages}`;
+    $("#prevPageBtn").disabled = state.page <= 1;
+    $("#nextPageBtn").disabled = state.page >= totalPages;
+  }
+
+  function syntaxHighlightJson(obj){
+    const json = JSON.stringify(obj, null, 2);
+    if(!json) return "";
+    // Match tokens against the raw (unescaped) JSON so string contents are matched
+    // correctly, then HTML-escape each piece as it's emitted.
+    return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false)\b|\bnull\b|-?\d+(\.\d+)?([eE][+-]?\d+)?)/g, function(match){
+      let cls = "jn";
+      let isKey = false;
+      if(/^"/.test(match)){
+        isKey = /:$/.test(match);
+        cls = isKey ? "jk" : "js";
+      }
+      else if(/true|false/.test(match)) cls = "jb";
+      else if(/null/.test(match)) cls = "jnull";
+
+      if(cls === "js"){
+        const inner = match.slice(1, -1); // strip the surrounding quotes
+        let rawVal;
+        try{ rawVal = JSON.parse('"' + inner + '"'); }catch(e){ rawVal = inner; }
+        if(isUrlString(rawVal)){
+          const href = /^www\./i.test(rawVal.trim()) ? "https://" + rawVal.trim() : rawVal.trim();
+          return `<span class="${cls}">&quot;<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="cell-link">${escapeHtml(inner)}</a>&quot;</span>`;
+        }
+      }
+      return `<span class="${cls}">${escapeHtml(match)}</span>`;
+    });
+  }
+
+  function renderJsonView(){
+    const body = $("#resultsBody");
+    $("#pager").style.display = "none";
+    if(state.queryResult.length === 0){
+      body.innerHTML = `<div class="empty-state"><b>No matching rows</b><div>Try adjusting filters or search.</div></div>`;
+      return;
+    }
+    const CAP = 2000;
+    const toShow = state.queryResult.length > CAP ? state.queryResult.slice(0, CAP) : state.queryResult;
+    const note = state.queryResult.length > CAP ? `<div class="hint" style="padding:0 14px;">Showing first ${CAP} of ${state.queryResult.length} rows in preview — download to get the full result.</div>` : "";
+    body.innerHTML = note + `<pre class="jsonview">${syntaxHighlightJson(toShow)}</pre>`;
+  }
+
+  function renderResults(){
+    if(!state.rawData){
+      $("#resultsBody").innerHTML = `<div class="empty-state"><b>No data yet</b><div>Load or paste JSON on the left to get started.</div></div>`;
+      $("#pager").style.display = "none";
+      return;
+    }
+    if(state.view === "table") renderTableView(); else renderJsonView();
+  }
+
+  function openCellModal(data){
+    $("#cellModalBody").innerHTML = syntaxHighlightJson(data);
+    $("#cellModal").classList.add("show");
+  }
+
+  /* ======================= JQ GENERATION ======================= */
+  function jqPathOf(path){
+    if(!path) return "";
+    return path.startsWith("[") ? path : "." + path;
+  }
+
+  function jqLiteral(v){
+    if(isNumericLike(v) && v !== "") return Number(v);
+    return v;
+  }
+
+  function condToJq(c){
+    const p = "." + c.field;
+    const val = c.value;
+    switch(c.operator){
+      case "=": return `(${p} == ${JSON.stringify(jqLiteral(val))})`;
+      case "!=": return `(${p} != ${JSON.stringify(jqLiteral(val))})`;
+      case "contains": return `(${p} | tostring | ascii_downcase | contains(${JSON.stringify(String(val).toLowerCase())}))`;
+      case "startsWith": return `(${p} | tostring | ascii_downcase | startswith(${JSON.stringify(String(val).toLowerCase())}))`;
+      case "endsWith": return `(${p} | tostring | ascii_downcase | endswith(${JSON.stringify(String(val).toLowerCase())}))`;
+      case "regex": return `(${p} | tostring | test(${JSON.stringify(val)}))`;
+      case ">": return `(${p} > ${JSON.stringify(jqLiteral(val))})`;
+      case "<": return `(${p} < ${JSON.stringify(jqLiteral(val))})`;
+      case ">=": return `(${p} >= ${JSON.stringify(jqLiteral(val))})`;
+      case "<=": return `(${p} <= ${JSON.stringify(jqLiteral(val))})`;
+      case "exists": return `(${p} != null)`;
+      case "isnull": return `(${p} == null)`;
+      default: return "true";
+    }
+  }
+
+  function renderJq(){
+    const notes = [];
+    let expr = ".";
+    if(state.rootPath.trim()) expr += jqPathOf(state.rootPath.trim()).slice(1);
+    expr += "[]";
+
+    const conds = [];
+    if(state.search){
+      conds.push({str: `(tostring | ascii_downcase | contains(${JSON.stringify(state.search.toLowerCase())}))`, join:"AND"});
+      notes.push("Global search is approximated with a stringified contains() check.");
+    }
+    state.filters.filter(f=>f.field && f.field.trim()).forEach(f => {
+      conds.push({str: condToJq(f), join: f.join, negated: !!f.negated});
+    });
+    if(conds.length){
+      let acc = conds[0].negated ? `((${conds[0].str}) | not)` : conds[0].str;
+      for(let i=1;i<conds.length;i++){
+        const term = conds[i].negated ? `((${conds[i].str}) | not)` : conds[i].str;
+        acc = `(${acc}) ${conds[i].join.toLowerCase()} (${term})`;
+      }
+      expr += ` | select(${acc})`;
+    }
+
+    const activeSorts = state.sorts.filter(s=>s.field);
+    if(activeSorts.length){
+      expr += ` | sort_by(${activeSorts.map(s=>jqPathOf(s.field)).join(", ")})`;
+      if(activeSorts[0].dir === "desc") expr += " | reverse";
+      if(activeSorts.length > 1) notes.push("jq's sort_by sorts all keys the same direction; mixed asc/desc across levels can't be fully expressed, shown here as first-level direction with reverse.");
+    }
+
+    const off = Math.max(0, parseInt(state.offset,10) || 0);
+    const lim = (state.limit === null || state.limit === "" || isNaN(parseInt(state.limit,10))) ? undefined : parseInt(state.limit,10);
+    if(off || lim !== undefined){
+      expr = `[${expr.replace(/^\.\[?\]?/, expr)}]`; // ensure array before slicing — simpler: wrap whole pipeline
+    }
+
+    // Rebuild cleanly as a full pipeline wrapped in [ ... ] when slicing/limiting needed, else stream.
+    let full;
+    const needsArray = (off>0 || lim!==undefined || state.columns.length>0);
+    if(off || lim !== undefined){
+      let base = ".";
+      if(state.rootPath.trim()) base += jqPathOf(state.rootPath.trim()).slice(1);
+      base += "[]";
+      if(conds.length){
+        let acc = conds[0].negated ? `((${conds[0].str}) | not)` : conds[0].str;
+        for(let i=1;i<conds.length;i++){
+          const term = conds[i].negated ? `((${conds[i].str}) | not)` : conds[i].str;
+          acc = `(${acc}) ${conds[i].join.toLowerCase()} (${term})`;
+        }
+        base += ` | select(${acc})`;
+      }
+      full = `[${base}]`;
+      if(activeSorts.length){
+        full += ` | sort_by(${activeSorts.map(s=>jqPathOf(s.field)).join(", ")})`;
+        if(activeSorts[0].dir === "desc") full += " | reverse";
+      }
+      const end = lim !== undefined ? `${off}:${off+lim}` : `${off}:`;
+      full += ` | .[${end}]`;
+      if(state.columns.length){
+        full += ` | map({${state.columns.filter(c=>c.path).map(c=>`${JSON.stringify(c.name&&c.name.trim()?c.name.trim():c.path)}: ${jqPathOf(c.path)}`).join(", ")}})`;
+      }
+    } else {
+      full = expr;
+      if(state.columns.length){
+        full += ` | {${state.columns.filter(c=>c.path).map(c=>`${JSON.stringify(c.name&&c.name.trim()?c.name.trim():c.path)}: ${jqPathOf(c.path)}`).join(", ")}}`;
+        full = state.rootPath.trim() ? `.${jqPathOf(state.rootPath.trim()).slice(1)} | map(select(${conds.length? (conds.map(c=>c.str).join(' and ')) : 'true'})) | map({${state.columns.filter(c=>c.path).map(c=>`${JSON.stringify(c.name&&c.name.trim()?c.name.trim():c.path)}: ${jqPathOf(c.path)}`).join(", ")}})` : full;
+      }
+    }
+
+    $("#jqOutput").textContent = `jq '${full}'`;
+    $("#jqNote").textContent = notes.join(" ");
+  }
+
+  /* ======================= DATA MUTATION ======================= */
+  function cloneMutationValue(value){
+    if(value === undefined) return undefined;
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function getParentAndKey(root, path, createParents){
+    const tokens = tokenizePath(path);
+    if(!tokens.length || tokens.some(t => t.t === "wild")) return null;
+    let current = root;
+    for(let i=0;i<tokens.length-1;i++){
+      const tok = tokens[i];
+      if(current === null || typeof current !== "object") return null;
+      let key;
+      if(tok.t === "idx"){
+        if(!Array.isArray(current)) return null;
+        key = tok.v < 0 ? current.length + tok.v : tok.v;
+        if(key < 0 || key >= current.length) {
+          if(!createParents) return null;
+          return null;
+        }
+      }else{
+        key = tok.v;
+      }
+      if(current[key] === undefined || current[key] === null || typeof current[key] !== "object"){
+        if(!createParents) return null;
+        const next = tokens[i+1];
+        current[key] = next && next.t === "idx" ? [] : {};
+      }
+      current = current[key];
+    }
+    const last = tokens[tokens.length-1];
+    if(last.t === "idx"){
+      if(!Array.isArray(current)) return null;
+      const key = last.v < 0 ? current.length + last.v : last.v;
+      if(key < 0) return null;
+      return {parent:current,key};
+    }
+    return {parent:current,key:last.v};
+  }
+
+  function setPathValue(root, path, value){
+    const target=getParentAndKey(root,path,true);
+    if(!target) return false;
+    target.parent[target.key]=cloneMutationValue(value);
+    return true;
+  }
+
+  function deletePathValue(root, path){
+    const target=getParentAndKey(root,path,false);
+    if(!target || target.parent === null || typeof target.parent !== "object") return false;
+    if(Array.isArray(target.parent)){
+      if(!(target.key in target.parent)) return false;
+      target.parent.splice(Number(target.key),1);
+      return true;
+    }
+    if(!Object.prototype.hasOwnProperty.call(target.parent,target.key)) return false;
+    delete target.parent[target.key];
+    return true;
+  }
+
+  function deleteNullFields(obj){
+    if(!obj || typeof obj !== "object" || Array.isArray(obj)) return 0;
+    let count=0;
+    Object.keys(obj).forEach(k=>{ if(obj[k]===null){ delete obj[k]; count++; } });
+    return count;
+  }
+
+  function valuesEqual(a,b){
+    if(a===b) return true;
+    if(Number.isNaN(a) && Number.isNaN(b)) return true;
+    if(a===null || b===null || typeof a!=="object" || typeof b!=="object") return false;
+    try{ return JSON.stringify(a)===JSON.stringify(b); }catch(e){ return false; }
+  }
+
+  function parseMutationMatchValue(raw){
+    const text=(raw||"").trim();
+    if(!text) return {provided:false,value:undefined};
+    try{ return {provided:true,value:JSON.parse(text)}; }
+    catch(e){ return {provided:true,value:text}; }
+  }
+
+  function deleteMatchingFields(obj, fieldPath, matchValue, hasMatchValue){
+    if(!obj || typeof obj !== "object" || Array.isArray(obj)) return 0;
+    let count=0;
+
+    // When a field path/name is supplied, delete only that exact path when its value matches.
+    if(fieldPath){
+      const target=getParentAndKey(obj,fieldPath,false);
+      if(target && target.parent && typeof target.parent === "object" && !Array.isArray(target.parent)){
+        if(Object.prototype.hasOwnProperty.call(target.parent,target.key)){
+          const current=target.parent[target.key];
+          if(!hasMatchValue || valuesEqual(current,matchValue)){ delete target.parent[target.key]; count++; }
+        }
+      }
+      return count;
+    }
+
+    // With no field name, search nested objects and remove every property whose value matches.
+    function walk(container){
+      if(!container || typeof container !== "object") return;
+      if(Array.isArray(container)){
+        container.forEach(item=>{ if(item && typeof item === "object") walk(item); });
+        return;
+      }
+      Object.keys(container).forEach(key=>{
+        const value=container[key];
+        if(hasMatchValue && valuesEqual(value,matchValue)){
+          delete container[key]; count++; return;
+        }
+        if(value && typeof value === "object") walk(value);
+      });
+    }
+    walk(obj);
+    return count;
+  }
+
+  function mutationTargets(){
+    if(!state.rows.length) return [];
+    const scope=$("#mutScope").value;
+    if(scope === "all") return state.rows.map((row,index)=>({row,index}));
+    const idx=parseInt($("#mutRowIndex").value,10);
+    if(!Number.isInteger(idx) || idx<0 || idx>=state.rows.length) return null;
+    return [{row:state.rows[idx],index:idx}];
+  }
+
+  function deleteObjectsMatchingField(fieldPath, matchValue, hasMatchValue, selectedIndices){
+    if(!Array.isArray(state.rows)) return 0;
+    const candidates = selectedIndices ? new Set(selectedIndices) : null;
+    const removeIndexes=[];
+    state.rows.forEach((row,index)=>{
+      if(candidates && !candidates.has(index)) return;
+      if(!row || typeof row !== "object" || Array.isArray(row)) return;
+      if(!fieldPath) return;
+      const value=getPath(row,fieldPath);
+      const exists=value !== undefined;
+      if(exists && (!hasMatchValue || valuesEqual(value,matchValue))) removeIndexes.push(index);
+    });
+    if(!removeIndexes.length) return 0;
+
+    const rootPath=state.rootPath.trim();
+    let targetArray=null;
+    if(!rootPath && Array.isArray(state.rawData)) targetArray=state.rawData;
+    else if(rootPath){
+      const target=getParentAndKey(state.rawData,rootPath,false);
+      if(target && target.parent && Array.isArray(target.parent[target.key])) targetArray=target.parent[target.key];
+    }
+    if(!targetArray) return 0;
+    for(let i=removeIndexes.length-1;i>=0;i--) targetArray.splice(removeIndexes[i],1);
+    return removeIndexes.length;
+  }
+
+  function refreshMutationUI(){
+    const op=$("#mutOperation").value;
+    const scope=$("#mutScope").value;
+    const isDelete=op === "delete";
+    const isDeleteObjects=op === "deleteObjects";
+    const needsValue = op === "insert" || isDelete || isDeleteObjects;
+    $("#mutValueWrap").style.display = needsValue ? "block" : "none";
+    $("#mutFieldWrap").style.display = (op === "deleteNulls") ? "none" : "block";
+    $("#mutRowWrap").style.display = scope === "one" ? "block" : "none";
+
+    if(isDelete || isDeleteObjects){
+      $("#mutFieldLabel").textContent = isDeleteObjects ? "Field name / path (required)" : "Field name / path (optional)";
+      $("#mutField").placeholder = isDeleteObjects ? "e.g. likes or stats.likes" : "e.g. likes or stats.likes (leave blank to match by value)";
+      $("#mutFieldHint").innerHTML = isDeleteObjects ? "Delete the entire object when this field exists. Add a value to require an exact match." : "Provide a field name/path, a value, or both. At least one is required.";
+      $("#mutValueLabel").textContent = isDeleteObjects ? "Value to match (optional)" : "Value to match (optional)";
+      $("#mutValue").placeholder = 'e.g. "4134", 4134, true, null';
+      $("#mutValueHint").textContent = isDeleteObjects ? "Leave blank to delete objects whenever the field exists. Values can be JSON; unquoted text is treated as a string." : "At least one of field name/path or value must be supplied. Values can be JSON; unquoted text is treated as a string.";
+    } else {
+      $("#mutFieldLabel").textContent = "Field path";
+      $("#mutField").placeholder = "e.g. stats.likes or profile.name";
+      $("#mutFieldHint").innerHTML = "Supports nested paths such as <code>stats.likes</code> and array indexes such as <code>items[0].name</code>.";
+      $("#mutValueLabel").textContent = "Value";
+      $("#mutValue").placeholder = 'JSON value, e.g. "hello", 123, true, {"x":1}';
+      $("#mutValueHint").textContent = "For strings, use JSON quotes. Arrays/objects are also supported.";
+    }
+
+    if(op === "deleteNulls") $("#mutPreview").textContent = scope === "all" ? "Will remove every direct field whose value is null from every object." : "Will remove every direct field whose value is null from the selected object.";
+    else if(isDeleteObjects) $("#mutPreview").textContent = scope === "all" ? "Will delete entire objects containing the specified field, optionally only when its value matches." : "Will delete the selected object if it contains the specified field and optional value matches.";
+    else if(isDelete) $("#mutPreview").textContent = "Will delete the matching field(s) from each selected object.";
+    else if(scope === "all") $("#mutPreview").innerHTML = `Will apply to <b>${state.rows.length}</b> object(s) in the current root.`;
+    else $("#mutPreview").innerHTML = "Will apply to the selected object index.";
+  }
+
+  function applyMutation(){
+    if(!state.rawData){ toast("Load JSON first"); return; }
+    const op=$("#mutOperation").value;
+    const field=$("#mutField").value.trim();
+    const rawMatch=$("#mutValue").value.trim();
+    if((op === "insert" || op === "null") && !field){ toast("Enter a field path"); return; }
+    if(op === "delete" && !field && !rawMatch){ toast("Enter a field name/path or a value"); return; }
+    if(op === "deleteObjects" && !field){ toast("Enter a field name/path"); return; }
+
+    let parsedValue;
+    let hasMatchValue=false;
+    if(op === "insert"){
+      if(!rawMatch){ toast("Enter a JSON value"); return; }
+      try{ parsedValue=JSON.parse(rawMatch); }catch(e){ toast("Value must be valid JSON"); return; }
+    } else if((op === "delete" || op === "deleteObjects") && rawMatch){
+      const parsed=parseMutationMatchValue(rawMatch);
+      hasMatchValue=parsed.provided;
+      parsedValue=parsed.value;
+    }
+
+    const targets=mutationTargets();
+    if(targets === null){ toast("Object index is out of range"); return; }
+    if(!targets || targets.length===0){ toast("No objects available"); return; }
+
+    let changed=0;
+    let removed=0;
+    if(op === "deleteObjects") {
+      removed = deleteObjectsMatchingField(field,parsedValue,hasMatchValue, targets.map(x=>x.index));
+    } else {
+      targets.forEach(({row})=>{
+        if(!row || typeof row !== "object" || Array.isArray(row)) return;
+        if(op === "insert"){ if(setPathValue(row,field,parsedValue)) changed++; }
+        else if(op === "null"){ if(setPathValue(row,field,null)) changed++; }
+        else if(op === "delete"){ removed += deleteMatchingFields(row,field,parsedValue,hasMatchValue); }
+        else if(op === "deleteNulls"){ removed += deleteNullFields(row); }
+      });
+    }
+
+    if(changed===0 && removed===0){ toast("No matching field changed"); return; }
+    const pretty=JSON.stringify(state.rawData,null,2);
+    $("#jsonInput").value=pretty;
+    $("#jsonEditor").value=pretty;
+    if($("#jsonEditorExpanded")) $("#jsonEditorExpanded").value=pretty;
+    applyRootPath();
+    renderTree();
+    runQuery();
+    saveWorkbenchState();
+    if(op === "deleteObjects") toast(`Deleted ${removed} object(s)`);
+    else toast(op === "delete" || op === "deleteNulls" ? `Removed ${removed} field(s)` : `${op === "insert" ? "Updated" : "Updated"} ${changed} object field(s)`);
+  }
+
+  /* ======================= EXPORT / COPY ======================= */
+  function downloadFile(filename, content, mime){
+    const blob = new Blob([content], {type: mime||"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /* ======================= QUERY CONFIG (SAVE/LOAD) ======================= */
+  const STORAGE_KEY = "jqbench_saved_queries_v1";
+  function getSavedQueries(){
+    try{ return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }catch(e){ return []; }
+  }
+  function setSavedQueries(list){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  }
+  function serializeConfig(){
+    return {
+      rootPath: state.rootPath,
+      search: state.search,
+      filters: state.filters.map(({id,...rest})=>rest),
+      sorts: state.sorts.map(({id,...rest})=>rest),
+      offset: state.offset,
+      limit: state.limit,
+      columns: state.columns.map(({id,...rest})=>rest),
+    };
+  }
+  function applyConfig(cfg){
+    state.rootPath = cfg.rootPath || "";
+    state.search = cfg.search || "";
+    state.filters = (cfg.filters||[]).map(f => ({id: nextId(), join:"AND", operator:"=", value:"", field:"", ...f}));
+    state.sorts = (cfg.sorts||[]).map(s => ({id: nextId(), dir:"asc", field:"", ...s}));
+    state.offset = cfg.offset || 0;
+    state.limit = cfg.limit ?? null;
+    state.columns = (cfg.columns||[]).map(c => ({id: nextId(), name:"", path:"", ...c}));
+
+    $("#rootPathInput").value = state.rootPath;
+    $("#searchInput").value = state.search;
+    $("#offsetInput").value = state.offset || 0;
+    $("#limitInput").value = state.limit ?? "";
+    renderFilters(); renderSorts(); renderColumns();
+    if(state.rawData) applyRootPath();
+    runQuery();
+  }
+
+  function renderSavedList(){
+    const list = $("#savedList");
+    const saved = getSavedQueries();
+    if(saved.length === 0){ list.innerHTML = `<div class="empty-note">No saved queries yet.</div>`; return; }
+    list.innerHTML = "";
+    saved.forEach((s, i) => {
+      const row = document.createElement("div");
+      row.className = "saved-item";
+      row.innerHTML = `<div class="sname" title="${escapeHtml(s.name)}">${escapeHtml(s.name)}<div class="sdate">${new Date(s.savedAt).toLocaleString()}</div></div>`;
+      const loadBtn = document.createElement("button");
+      loadBtn.className = "xs ghost"; loadBtn.textContent = "Load";
+      loadBtn.addEventListener("click", ()=>{ applyConfig(s.config); toast(`Loaded "${s.name}"`); });
+      const rmBtn = document.createElement("button");
+      rmBtn.className = "xs ghost"; rmBtn.textContent = "✕";
+      rmBtn.addEventListener("click", ()=>{
+        const cur = getSavedQueries(); cur.splice(i,1); setSavedQueries(cur); renderSavedList();
+      });
+      row.appendChild(loadBtn); row.appendChild(rmBtn);
+      list.appendChild(row);
+    });
+  }
+
+  /* ======================= WIRE UP UI ======================= */
+  // tabs
+  $all(".tabbar button").forEach(btn => {
+    btn.addEventListener("click", ()=>{
+      $all(".tabbar button").forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      $all(".tabpanel").forEach(p=>p.classList.remove("active"));
+      $("#tab-"+btn.dataset.tab).classList.add("active");
+      saveWorkbenchState();
+    });
+  });
+
+  // load
+  $("#loadBtn").addEventListener("click", ()=> loadJsonText($("#jsonInput").value));
+  $("#sampleBtn").addEventListener("click", ()=>{
+    $("#jsonInput").value = JSON.stringify(SAMPLE, null, 2);
+    $("#rootPathInput").value = "videos";
+    state.rootPath = "videos";
+    loadJsonText($("#jsonInput").value);
+  });
+  $("#prettifyBtn").addEventListener("click", ()=>{
+    try{ $("#jsonInput").value = JSON.stringify(JSON.parse($("#jsonInput").value), null, 2); }
+    catch(e){ toast("Can't prettify — invalid JSON"); }
+  });
+  $("#rootPathInput").addEventListener("input", debounce(()=>{
+    state.rootPath = $("#rootPathInput").value;
+    if(state.rawData){ applyRootPath(); runQuery(); }
+    saveWorkbenchState();
+  }, 250));
+
+  const dropZone = $("#dropZone");
+  const fileInput = $("#fileInput");
+  dropZone.addEventListener("click", ()=> fileInput.click());
+  dropZone.addEventListener("dragover", e=>{ e.preventDefault(); dropZone.classList.add("drag"); });
+  dropZone.addEventListener("dragleave", ()=> dropZone.classList.remove("drag"));
+  dropZone.addEventListener("drop", e=>{
+    e.preventDefault(); dropZone.classList.remove("drag");
+    const f = e.dataTransfer.files[0];
+    if(f) readFile(f);
+  });
+  fileInput.addEventListener("change", ()=>{ if(fileInput.files[0]) readFile(fileInput.files[0]); });
+  function readFile(file){
+    const reader = new FileReader();
+    reader.onload = () => { state.sourceFileName = (file.name && /\.json$/i.test(file.name)) ? file.name : ((file.name||"data") + ".json"); $("#jsonInput").value = reader.result; loadJsonText(reader.result); saveWorkbenchState(); };
+    reader.readAsText(file);
+  }
+
+  // edit JSON
+  // Shared logic drives both the sidebar editor (#jsonEditor) and the expanded
+  // full-screen editor (#jsonEditorExpanded) — each button just points at its own textarea/status pair.
+  function setEditStatusEl(el, ok, text){
+    el.className="status-line "+(ok?"ok":"err"); el.textContent=(ok?"✓ ":"✗ ")+text;
+  }
+  function setEditStatus(ok, text){ setEditStatusEl($("#editStatus"), ok, text); }
+  function syncEditorFromState(){
+    const text = state.rawData == null ? "" : JSON.stringify(state.rawData, null, 2);
+    $("#jsonEditor").value = text;
+  }
+  function formatJsonIn(el, statusEl){
+    try{ const parsed=JSON.parse(el.value); el.value=JSON.stringify(parsed,null,2); setEditStatusEl(statusEl,true,"Valid JSON — formatted"); }
+    catch(e){ setEditStatusEl(statusEl,false,"Parse error: "+e.message); }
+  }
+  function validateJsonIn(el, statusEl){
+    try{ JSON.parse(el.value); setEditStatusEl(statusEl,true,"Valid JSON"); }
+    catch(e){ setEditStatusEl(statusEl,false,"Parse error: "+e.message); }
+  }
+  function applyJsonFrom(el, statusEl, otherEl){
+    const text=el.value;
+    try{
+      const parsed=JSON.parse(text);
+      state.rawData=parsed;
+      const pretty = JSON.stringify(parsed,null,2);
+      $("#jsonInput").value=pretty;
+      el.value = pretty;
+      if(otherEl) otherEl.value = pretty;
+      applyRootPath(); renderTree(); runQuery();
+      setEditStatusEl(statusEl,true,"Changes applied to the query");
+      saveWorkbenchState(); toast("JSON changes applied");
+    }catch(e){ setEditStatusEl(statusEl,false,"Parse error: "+e.message); }
+  }
+  async function saveJsonFrom(el, statusEl){
+    const text=el.value;
+    try{ JSON.parse(text); }
+    catch(e){ setEditStatusEl(statusEl,false,"Fix the JSON before saving: "+e.message); return; }
+    const filename = state.sourceFileName || "data.json";
+    try{
+      if("showSaveFilePicker" in window){
+        const handle=await window.showSaveFilePicker({suggestedName:filename,types:[{description:"JSON file",accept:{"application/json":[".json"]}}]});
+        const writable=await handle.createWritable(); await writable.write(text); await writable.close();
+        setEditStatusEl(statusEl,true,"Saved to "+handle.name); toast("JSON saved");
+      }else{
+        downloadFile(filename,text,"application/json");
+        setEditStatusEl(statusEl,true,"Downloaded "+filename); toast("JSON downloaded");
+      }
+    }catch(e){ if(e && e.name!=="AbortError") { downloadFile(filename,text,"application/json"); setEditStatusEl(statusEl,true,"Downloaded "+filename); } }
+  }
+
+  // sidebar editor
+  $("#formatJsonBtn").addEventListener("click", ()=> formatJsonIn($("#jsonEditor"), $("#editStatus")));
+  $("#validateJsonBtn").addEventListener("click", ()=> validateJsonIn($("#jsonEditor"), $("#editStatus")));
+  $("#applyJsonBtn").addEventListener("click", ()=> applyJsonFrom($("#jsonEditor"), $("#editStatus"), $("#jsonEditorExpanded")));
+  $("#saveJsonBtn").addEventListener("click", ()=> saveJsonFrom($("#jsonEditor"), $("#editStatus")));
+  $("#jsonEditor").addEventListener("input", debounce(()=>saveWorkbenchState(),400));
+
+  // expanded editor (full-screen modal, for more room to work)
+  $("#expandEditorBtn").addEventListener("click", ()=>{
+    $("#jsonEditorExpanded").value = $("#jsonEditor").value;
+    setEditStatusEl($("#editStatusX"), true, "");
+    $("#editStatusX").textContent = "";
+    $("#editorModal").classList.add("show");
+    setTimeout(()=> $("#jsonEditorExpanded").focus(), 0);
+  });
+  function closeEditorModal(){
+    $("#jsonEditor").value = $("#jsonEditorExpanded").value;
+    saveWorkbenchState();
+    $("#editorModal").classList.remove("show");
+  }
+  $("#closeEditorModal").addEventListener("click", closeEditorModal);
+  $("#editorModal").addEventListener("click", (e)=>{ if(e.target.id==="editorModal") closeEditorModal(); });
+  $("#formatJsonBtnX").addEventListener("click", ()=> formatJsonIn($("#jsonEditorExpanded"), $("#editStatusX")));
+  $("#validateJsonBtnX").addEventListener("click", ()=> validateJsonIn($("#jsonEditorExpanded"), $("#editStatusX")));
+  $("#applyJsonBtnX").addEventListener("click", ()=> applyJsonFrom($("#jsonEditorExpanded"), $("#editStatusX"), $("#jsonEditor")));
+  $("#saveJsonBtnX").addEventListener("click", ()=> saveJsonFrom($("#jsonEditorExpanded"), $("#editStatusX")));
+  $("#jsonEditorExpanded").addEventListener("input", debounce(()=>{
+    $("#jsonEditor").value = $("#jsonEditorExpanded").value;
+    saveWorkbenchState();
+  }, 400));
+
+  // data mutation
+  $("#mutOperation").addEventListener("change", refreshMutationUI);
+  $("#mutScope").addEventListener("change", refreshMutationUI);
+  $("#mutRowIndex").addEventListener("input", refreshMutationUI);
+  $("#mutApplyBtn").addEventListener("click", applyMutation);
+  $("#mutSaveBtn").addEventListener("click", ()=> saveJsonFrom($("#jsonEditor"), $("#editStatus")));
+  $("#mutClearBtn").addEventListener("click", ()=>{
+    $("#mutField").value=""; $("#mutValue").value=""; $("#mutRowIndex").value="";
+    $("#mutOperation").value="insert"; $("#mutScope").value="all"; refreshMutationUI();
+  });
+  refreshMutationUI();
+
+  // browse
+  $("#expandAllBtn").addEventListener("click", ()=>{
+    // brute-force expand by walking structure and adding all paths (careful with huge data)
+    function walk(value, path, depth){
+      if(depth > 6) return;
+      if(value !== null && typeof value === "object"){
+        state.treeExpanded.add(path);
+        const entries = Array.isArray(value) ? value.map((v,i)=>[i,v]) : Object.entries(value);
+        entries.slice(0,200).forEach(([k,v])=>{
+          const childPath = path ? (Array.isArray(value) ? `${path}[${k}]` : `${path}.${k}`) : (Array.isArray(value) ? `[${k}]` : `${k}`);
+          walk(v, childPath, depth+1);
+        });
+      }
+    }
+    if(state.rawData){ walk(state.rawData, "", 0); renderTree(); saveWorkbenchState(); }
+  });
+  $("#collapseAllBtn").addEventListener("click", ()=>{ state.treeExpanded = new Set(); renderTree(); saveWorkbenchState(); });
+  $("#treeFilter").addEventListener("input", debounce(()=>{
+    // simple approach: expand everything then let user use ctrl+F; full-text tree filter is complex, so we just re-render for now
+    renderTree();
+  }, 250));
+
+  // query
+  $("#searchInput").addEventListener("input", debounce(()=>{ state.search=$("#searchInput").value; runQuery(); saveWorkbenchState(); },180));
+  $("#addFilterBtn").addEventListener("click", ()=>{addFilter();saveWorkbenchState();});
+  $("#addSortBtn").addEventListener("click", ()=>{addSort();saveWorkbenchState();});
+  $("#addColBtn").addEventListener("click", ()=>{addColumn();saveWorkbenchState();});
+  $("#detectColBtn").addEventListener("click", ()=>{detectColumns();saveWorkbenchState();});
+  $("#clearColBtn").addEventListener("click", ()=>{state.columns=[];renderColumns();runQuery();saveWorkbenchState();});
+  $("#offsetInput").addEventListener("input",debounce(()=>{state.offset=parseInt($("#offsetInput").value,10)||0;runQuery();saveWorkbenchState();},180));
+  $("#limitInput").addEventListener("input",debounce(()=>{const v=$("#limitInput").value;state.limit=v===""?null:v;runQuery();saveWorkbenchState();},180));
+  $("#resetQueryBtn").addEventListener("click", ()=>{
+    state.search=""; state.filters=[]; state.sorts=[]; state.offset=0; state.limit=null; state.columns=[];
+    $("#searchInput").value=""; $("#offsetInput").value=0; $("#limitInput").value="";
+    renderFilters(); renderSorts(); renderColumns(); runQuery(); saveWorkbenchState();
+    toast("Query reset");
+  });
+
+  // results view
+  $("#viewTableBtn").addEventListener("click", ()=>{state.view="table";updateViewButtons();renderResults();saveWorkbenchState();});
+  $("#viewJsonBtn").addEventListener("click", ()=>{state.view="json";updateViewButtons();renderResults();saveWorkbenchState();});
+  $("#pageSizeSel").addEventListener("change", ()=>{state.pageSize=parseInt($("#pageSizeSel").value,10);state.page=1;renderResults();saveWorkbenchState();});
+  $("#prevPageBtn").addEventListener("click", ()=>{if(state.page>1){state.page--;renderResults();saveWorkbenchState();}});
+  $("#nextPageBtn").addEventListener("click", ()=>{state.page++;renderResults();saveWorkbenchState();});
+
+  $("#copyResultsBtn").addEventListener("click", ()=>{
+    navigator.clipboard.writeText(JSON.stringify(state.queryResult, null, 2)).then(()=> toast("Results copied to clipboard"));
+  });
+  $("#downloadResultsBtn").addEventListener("click", ()=>{
+    downloadFile("query-results.json", JSON.stringify(state.queryResult, null, 2));
+    toast("Downloaded query-results.json");
+  });
+  $("#copyJqBtn").addEventListener("click", ()=>{
+    navigator.clipboard.writeText($("#jqOutput").textContent).then(()=> toast("jq command copied"));
+  });
+
+  $("#closeCellModal").addEventListener("click", ()=> $("#cellModal").classList.remove("show"));
+  $("#cellModal").addEventListener("click", (e)=>{ if(e.target.id==="cellModal") $("#cellModal").classList.remove("show"); });
+
+  // saved / config
+  $("#saveQueryBtn").addEventListener("click", ()=>{
+    const name = $("#saveNameInput").value.trim();
+    if(!name){ toast("Give the query a name first"); return; }
+    const saved = getSavedQueries();
+    saved.unshift({name, savedAt: Date.now(), config: serializeConfig()});
+    setSavedQueries(saved.slice(0,50));
+    $("#saveNameInput").value = "";
+    renderSavedList();
+    toast(`Saved "${name}"`);
+  });
+  $("#exportCfgBtn").addEventListener("click", ()=>{
+    downloadFile("jqbench-query.json", JSON.stringify(serializeConfig(), null, 2));
+    toast("Exported query config");
+  });
+  $("#importCfgBtn").addEventListener("click", ()=> $("#importCfgFile").click());
+  $("#importCfgFile").addEventListener("change", ()=>{
+    const f = $("#importCfgFile").files[0];
+    if(!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{ applyConfig(JSON.parse(reader.result)); toast("Query config imported"); }
+      catch(e){ toast("Invalid config file"); }
+    };
+    reader.readAsText(f);
+  });
+
+  // resizable side panel
+  (function initSidebarResize(){
+    const handle=$("#colResize");
+    let dragging=false;
+    handle.addEventListener("pointerdown", e=>{
+      if(window.matchMedia("(max-width: 800px)").matches) return;
+      dragging=true; handle.classList.add("dragging"); handle.setPointerCapture(e.pointerId);
+      document.body.style.cursor="col-resize"; document.body.style.userSelect="none";
+      e.preventDefault();
+    });
+    handle.addEventListener("pointermove", e=>{
+      if(!dragging) return;
+      const width=Math.max(240,Math.min(600,e.clientX));
+      state.sidebarWidth=width; document.documentElement.style.setProperty("--sidebar-width",width+"px");
+    });
+    const stop=()=>{
+      if(!dragging) return; dragging=false; handle.classList.remove("dragging");
+      document.body.style.cursor=""; document.body.style.userSelect=""; saveWorkbenchState();
+    };
+    handle.addEventListener("pointerup",stop); handle.addEventListener("pointercancel",stop);
+  })();
+
+  // init
+  const restored=restoreWorkbenchState();
+  if(!restored) document.documentElement.style.setProperty("--sidebar-width",state.sidebarWidth+"px");
+  if(!restored){renderFilters();renderSorts();renderColumns();}
+  renderSavedList();renderResults();renderJq();updateViewButtons();
+  if(restored&&state.rawData) runQuery();
+
+  document.addEventListener("keydown", (e)=>{
+    if(e.key === "Escape"){
+      $("#cellModal").classList.remove("show");
+      if($("#editorModal").classList.contains("show")) closeEditorModal();
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
