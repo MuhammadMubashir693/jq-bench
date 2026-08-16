@@ -218,6 +218,17 @@
 
   .empty-note{ color: var(--muted-2); font-size:11px; padding:8px 2px; }
 
+  .agg-row{ display:flex; gap:6px; align-items:center; }
+  .agg-row select{ width:auto; flex-shrink:0; }
+  .agg-result{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    background: var(--panel-2); border:1px solid var(--border); border-radius: var(--radius);
+    padding:6px 9px; font-family: var(--mono); font-size:11.5px;
+  }
+  .agg-result .agg-label{ color: var(--muted); }
+  .agg-result .agg-label b{ color: var(--text); font-weight:600; }
+  .agg-result .agg-value{ color: var(--accent); font-weight:700; }
+
   /* ---------- results header ---------- */
   .results-bar{
     display:flex; align-items:center; gap:8px; padding:6px 10px;
@@ -530,6 +541,12 @@
           </div>
         </div>
 
+        <h3 class="sec">Aggregation <span class="hint" style="margin:0;">summarize the result set</span></h3>
+        <div class="stack" id="aggList"></div>
+        <button class="ghost xs" id="addAggBtn" style="margin-top:6px; align-self:flex-start;">+ Add aggregation</button>
+        <div class="hint">Computed over the filtered/sorted rows, before offset/limit and column projection. <code>count</code> ignores the field. Non-numeric values are skipped for sum/avg/max/min.</div>
+        <div class="stack" id="aggResults" style="margin-top:8px;"></div>
+
         <h3 class="sec">Columns <span class="hint" style="margin:0;">select / extract fields</span></h3>
         <div class="stack" id="colList"></div>
         <div class="row" style="margin-top:6px;">
@@ -651,6 +668,7 @@
     offset: 0,
     limit: null,
     columns: [],            // {id, name, path}
+    aggregations: [],        // {id, fn, field}
     view: "table",
     pageSize: 50,
     page: 1,
@@ -666,7 +684,7 @@
 
   const STATE_STORAGE_KEY = "jqbench_state_v1";
   function serializeWorkbenchState(){
-    return {rawData:state.rawData,rootPath:state.rootPath,search:state.search,filters:state.filters.map(({id,...x})=>x),sorts:state.sorts.map(({id,...x})=>x),offset:state.offset,limit:state.limit,columns:state.columns.map(({id,...x})=>x),view:state.view,pageSize:state.pageSize,page:state.page,treeExpanded:Array.from(state.treeExpanded),columnWidths:state.columnWidths,jsonInput:$("#jsonInput")?.value||"",sourceFileName:state.sourceFileName||"data.json",sidebarWidth:state.sidebarWidth||300};
+    return {rawData:state.rawData,rootPath:state.rootPath,search:state.search,filters:state.filters.map(({id,...x})=>x),sorts:state.sorts.map(({id,...x})=>x),offset:state.offset,limit:state.limit,columns:state.columns.map(({id,...x})=>x),aggregations:state.aggregations.map(({id,...x})=>x),view:state.view,pageSize:state.pageSize,page:state.page,treeExpanded:Array.from(state.treeExpanded),columnWidths:state.columnWidths,jsonInput:$("#jsonInput")?.value||"",sourceFileName:state.sourceFileName||"data.json",sidebarWidth:state.sidebarWidth||300};
   }
   function saveWorkbenchState(){try{localStorage.setItem(STATE_STORAGE_KEY,JSON.stringify(serializeWorkbenchState()));}catch(e){}}
   function updateViewButtons(){
@@ -682,12 +700,13 @@
       state.sorts=(cfg.sorts||[]).map(x=>({id:nextId(),dir:"asc",field:"",...x}));
       state.offset=cfg.offset||0; state.limit=cfg.limit??null;
       state.columns=(cfg.columns||[]).map(c=>({id:nextId(),name:"",path:"",...c}));
+      state.aggregations=(cfg.aggregations||[]).map(a=>({id:nextId(),fn:"count",field:"",...a}));
       state.view=cfg.view==="json"?"json":"table"; state.pageSize=[25,50,100,250,500].includes(Number(cfg.pageSize))?Number(cfg.pageSize):50; state.page=Math.max(1,parseInt(cfg.page,10)||1);
       state.treeExpanded=new Set(Array.isArray(cfg.treeExpanded)?cfg.treeExpanded:["root"]);
       state.columnWidths=(cfg.columnWidths && typeof cfg.columnWidths === "object") ? cfg.columnWidths : {}; state.sourceFileName=cfg.sourceFileName||"data.json"; state.sidebarWidth=Math.max(240,Math.min(600,parseInt(cfg.sidebarWidth,10)||300)); document.documentElement.style.setProperty("--sidebar-width",state.sidebarWidth+"px");
       $("#jsonInput").value=cfg.jsonInput||(state.rawData!=null?JSON.stringify(state.rawData,null,2):""); $("#jsonEditor").value=cfg.jsonInput||(state.rawData!=null?JSON.stringify(state.rawData,null,2):""); $("#rootPathInput").value=state.rootPath; $("#searchInput").value=state.search; $("#offsetInput").value=state.offset||0; $("#limitInput").value=state.limit??""; $("#pageSizeSel").value=String(state.pageSize);
       if(state.rawData){const el=$("#loadStatus");el.className="status-line ok";el.textContent=`✓ Restored — top level is ${Array.isArray(state.rawData)?`array (${state.rawData.length} items)`:typeof state.rawData}`;applyRootPath();renderTree();}
-      renderFilters();renderSorts();renderColumns();updateViewButtons();return true;
+      renderFilters();renderSorts();renderColumns();renderAggregations();updateViewButtons();return true;
     }catch(e){return false;}
   }
 
@@ -939,6 +958,17 @@
     state.columns.push({id: nextId(), name: name||"", path: path||""});
     renderColumns();
   }
+  const AGG_FNS = [
+    {v:"count", l:"Count"},
+    {v:"sum", l:"Sum"},
+    {v:"avg", l:"Average"},
+    {v:"max", l:"Max"},
+    {v:"min", l:"Min"},
+  ];
+  function addAggregation(){
+    state.aggregations.push({id: nextId(), fn:"count", field:""});
+    renderAggregations();
+  }
 
   function renderFilters(){
     const list = $("#filterList");
@@ -1132,6 +1162,90 @@
     });
   }
 
+  function renderAggregations(){
+    const list = $("#aggList");
+    list.innerHTML = "";
+    if(state.aggregations.length === 0){
+      list.innerHTML = `<div class="empty-note">No aggregations. Add one to summarize the filtered rows.</div>`;
+      return;
+    }
+    state.aggregations.forEach(a => {
+      const row = document.createElement("div");
+      row.className = "agg-row";
+
+      const fnSelect = document.createElement("select");
+      AGG_FNS.forEach(f => {
+        const opt = document.createElement("option");
+        opt.value = f.v; opt.textContent = f.l;
+        if(f.v === a.fn) opt.selected = true;
+        fnSelect.appendChild(opt);
+      });
+      fnSelect.addEventListener("change", ()=>{ a.fn = fnSelect.value; renderAggregations(); scheduleRun(); saveWorkbenchState(); });
+
+      const fieldInput = document.createElement("input");
+      fieldInput.type = "text"; fieldInput.className = "grow";
+      fieldInput.placeholder = a.fn === "count" ? "field path (optional)" : "field path e.g. stats.likes";
+      fieldInput.value = a.field;
+      fieldInput.addEventListener("input", ()=>{ a.field = fieldInput.value; scheduleRun(); saveWorkbenchState(); });
+
+      const rmBtn = document.createElement("button");
+      rmBtn.className = "xs ghost"; rmBtn.textContent = "✕";
+      rmBtn.addEventListener("click", ()=>{ state.aggregations = state.aggregations.filter(x=>x.id!==a.id); renderAggregations(); scheduleRun(); saveWorkbenchState(); });
+
+      row.appendChild(fnSelect);
+      row.appendChild(fieldInput);
+      row.appendChild(rmBtn);
+      list.appendChild(row);
+    });
+  }
+
+  function computeAggregation(rows, agg){
+    if(agg.fn === "count"){
+      if(!agg.field || !agg.field.trim()) return rows.length;
+      let c = 0;
+      rows.forEach(r => { const v = getPath(r, agg.field); if(v !== undefined && v !== null) c++; });
+      return c;
+    }
+    if(!agg.field || !agg.field.trim()) return null;
+    const nums = [];
+    rows.forEach(r => {
+      const v = getPath(r, agg.field);
+      if(isNumericLike(v)) nums.push(Number(v));
+    });
+    if(nums.length === 0) return null;
+    switch(agg.fn){
+      case "sum": return nums.reduce((a,b)=>a+b, 0);
+      case "avg": return nums.reduce((a,b)=>a+b, 0) / nums.length;
+      case "max": return Math.max(...nums);
+      case "min": return Math.min(...nums);
+      default: return null;
+    }
+  }
+
+  function formatAggValue(v){
+    if(v === null || v === undefined) return "—";
+    if(typeof v === "number"){
+      return Number.isInteger(v) ? String(v) : (Math.round(v*1000)/1000).toString();
+    }
+    return String(v);
+  }
+
+  function renderAggregationResults(rows){
+    const box = $("#aggResults");
+    const active = state.aggregations.filter(a => a.fn === "count" || (a.field && a.field.trim()));
+    if(active.length === 0){ box.innerHTML = ""; return; }
+    box.innerHTML = "";
+    active.forEach(a => {
+      const val = computeAggregation(rows, a);
+      const el = document.createElement("div");
+      el.className = "agg-result";
+      const label = AGG_FNS.find(f=>f.v===a.fn)?.l || a.fn;
+      const fieldLabel = a.field && a.field.trim() ? a.field.trim() : (a.fn === "count" ? "rows" : "—");
+      el.innerHTML = `<span class="agg-label">${escapeHtml(label)} of <b>${escapeHtml(fieldLabel)}</b></span><span class="agg-value">${escapeHtml(formatAggValue(val))}</span>`;
+      box.appendChild(el);
+    });
+  }
+
   function detectColumns(){
     if(!state.rows.length){ toast("No rows to detect from"); return; }
     const keys = new Set();
@@ -1276,6 +1390,7 @@
     const sliced = lim !== undefined ? sorted.slice(off, off+lim) : sorted.slice(off);
     state.queryResult = sliced.map(projectRow);
     state.page = 1;
+    renderAggregationResults(sorted);
     updateRowcountBadge();
     renderResults();
     renderJq();
@@ -1841,6 +1956,7 @@
       offset: state.offset,
       limit: state.limit,
       columns: state.columns.map(({id,...rest})=>rest),
+      aggregations: state.aggregations.map(({id,...rest})=>rest),
     };
   }
   function applyConfig(cfg){
@@ -1851,12 +1967,13 @@
     state.offset = cfg.offset || 0;
     state.limit = cfg.limit ?? null;
     state.columns = (cfg.columns||[]).map(c => ({id: nextId(), name:"", path:"", ...c}));
+    state.aggregations = (cfg.aggregations||[]).map(a => ({id: nextId(), fn:"count", field:"", ...a}));
 
     $("#rootPathInput").value = state.rootPath;
     $("#searchInput").value = state.search;
     $("#offsetInput").value = state.offset || 0;
     $("#limitInput").value = state.limit ?? "";
-    renderFilters(); renderSorts(); renderColumns();
+    renderFilters(); renderSorts(); renderColumns(); renderAggregations();
     if(state.rawData) applyRootPath();
     runQuery();
   }
@@ -2050,14 +2167,15 @@
   $("#addFilterBtn").addEventListener("click", ()=>{addFilter();saveWorkbenchState();});
   $("#addSortBtn").addEventListener("click", ()=>{addSort();saveWorkbenchState();});
   $("#addColBtn").addEventListener("click", ()=>{addColumn();saveWorkbenchState();});
+  $("#addAggBtn").addEventListener("click", ()=>{addAggregation();saveWorkbenchState();});
   $("#detectColBtn").addEventListener("click", ()=>{detectColumns();saveWorkbenchState();});
   $("#clearColBtn").addEventListener("click", ()=>{state.columns=[];renderColumns();runQuery();saveWorkbenchState();});
   $("#offsetInput").addEventListener("input",debounce(()=>{state.offset=parseInt($("#offsetInput").value,10)||0;runQuery();saveWorkbenchState();},180));
   $("#limitInput").addEventListener("input",debounce(()=>{const v=$("#limitInput").value;state.limit=v===""?null:v;runQuery();saveWorkbenchState();},180));
   $("#resetQueryBtn").addEventListener("click", ()=>{
-    state.search=""; state.filters=[]; state.sorts=[]; state.offset=0; state.limit=null; state.columns=[];
+    state.search=""; state.filters=[]; state.sorts=[]; state.offset=0; state.limit=null; state.columns=[]; state.aggregations=[];
     $("#searchInput").value=""; $("#offsetInput").value=0; $("#limitInput").value="";
-    renderFilters(); renderSorts(); renderColumns(); runQuery(); saveWorkbenchState();
+    renderFilters(); renderSorts(); renderColumns(); renderAggregations(); runQuery(); saveWorkbenchState();
     toast("Query reset");
   });
 
@@ -2134,7 +2252,7 @@
   // init
   const restored=restoreWorkbenchState();
   if(!restored) document.documentElement.style.setProperty("--sidebar-width",state.sidebarWidth+"px");
-  if(!restored){renderFilters();renderSorts();renderColumns();}
+  if(!restored){renderFilters();renderSorts();renderColumns();renderAggregations();}
   renderSavedList();renderResults();renderJq();updateViewButtons();
   if(restored&&state.rawData) runQuery();
 
