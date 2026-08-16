@@ -1564,15 +1564,23 @@
 
   function renderJsonView(){
     const body = $("#resultsBody");
-    $("#pager").style.display = "none";
     if(state.queryResult.length === 0){
       body.innerHTML = `<div class="empty-state"><b>No matching rows</b><div>Try adjusting filters or search.</div></div>`;
+      $("#pager").style.display = "none";
       return;
     }
-    const CAP = 2000;
-    const toShow = state.queryResult.length > CAP ? state.queryResult.slice(0, CAP) : state.queryResult;
-    const note = state.queryResult.length > CAP ? `<div class="hint" style="padding:0 14px;">Showing first ${CAP} of ${state.queryResult.length} rows in preview — download to get the full result.</div>` : "";
-    body.innerHTML = note + `<pre class="jsonview">${syntaxHighlightJson(toShow)}</pre>`;
+    const totalPages = Math.max(1, Math.ceil(state.queryResult.length / state.pageSize));
+    state.page = Math.min(state.page, totalPages);
+    const start = (state.page-1) * state.pageSize;
+    const pageRows = state.queryResult.slice(start, start+state.pageSize);
+
+    body.innerHTML = `<pre class="jsonview">${syntaxHighlightJson(pageRows)}</pre>`;
+
+    $("#pager").style.display = "flex";
+    $("#pagerInfo").textContent = `${state.queryResult.length ? start+1 : 0}–${Math.min(start+state.pageSize, state.queryResult.length)} of ${state.queryResult.length}`;
+    $("#pageNumLabel").textContent = `${state.page} / ${totalPages}`;
+    $("#prevPageBtn").disabled = state.page <= 1;
+    $("#nextPageBtn").disabled = state.page >= totalPages;
   }
 
   function renderResults(){
