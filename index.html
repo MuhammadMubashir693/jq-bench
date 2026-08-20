@@ -610,7 +610,8 @@
           <option>25</option><option selected>50</option><option>100</option><option>250</option><option>500</option>
         </select>
         <button class="ghost xs icon-btn" id="prevPageBtn">◂ prev</button>
-        <span id="pageNumLabel">1 / 1</span>
+        <input type="number" id="pageNumInput" value="1" min="1" style="width:48px; padding:3px 4px; font-size:11px; text-align:center;">
+        <span id="pageNumTotal">/ 1</span>
         <button class="ghost xs icon-btn" id="nextPageBtn">next ▸</button>
       </div>
 
@@ -1529,7 +1530,9 @@
 
     $("#pager").style.display = "flex";
     $("#pagerInfo").textContent = `${state.queryResult.length ? start+1 : 0}–${Math.min(start+state.pageSize, state.queryResult.length)} of ${state.queryResult.length}`;
-    $("#pageNumLabel").textContent = `${state.page} / ${totalPages}`;
+    $("#pageNumInput").value = state.page;
+    $("#pageNumInput").max = totalPages;
+    $("#pageNumTotal").textContent = `/ ${totalPages}`;
     $("#prevPageBtn").disabled = state.page <= 1;
     $("#nextPageBtn").disabled = state.page >= totalPages;
   }
@@ -1578,7 +1581,9 @@
 
     $("#pager").style.display = "flex";
     $("#pagerInfo").textContent = `${state.queryResult.length ? start+1 : 0}–${Math.min(start+state.pageSize, state.queryResult.length)} of ${state.queryResult.length}`;
-    $("#pageNumLabel").textContent = `${state.page} / ${totalPages}`;
+    $("#pageNumInput").value = state.page;
+    $("#pageNumInput").max = totalPages;
+    $("#pageNumTotal").textContent = `/ ${totalPages}`;
     $("#prevPageBtn").disabled = state.page <= 1;
     $("#nextPageBtn").disabled = state.page >= totalPages;
   }
@@ -2193,6 +2198,15 @@
   $("#pageSizeSel").addEventListener("change", ()=>{state.pageSize=parseInt($("#pageSizeSel").value,10);state.page=1;renderResults();saveWorkbenchState();});
   $("#prevPageBtn").addEventListener("click", ()=>{if(state.page>1){state.page--;renderResults();saveWorkbenchState();}});
   $("#nextPageBtn").addEventListener("click", ()=>{state.page++;renderResults();saveWorkbenchState();});
+  $("#pageNumInput").addEventListener("keydown", (e)=>{
+    if(e.key !== "Enter") return;
+    const totalPages = Math.max(1, Math.ceil(state.queryResult.length / state.pageSize));
+    let p = parseInt(e.target.value, 10);
+    if(!Number.isFinite(p) || p < 1 || p > totalPages) p = 1;
+    state.page = p;
+    renderResults();
+    saveWorkbenchState();
+  });
 
   $("#copyResultsBtn").addEventListener("click", ()=>{
     navigator.clipboard.writeText(JSON.stringify(state.queryResult, null, 2)).then(()=> toast("Results copied to clipboard"));
