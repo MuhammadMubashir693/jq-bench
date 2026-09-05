@@ -109,6 +109,25 @@
   .tabpanel{ display:none; flex:1; min-height:0; min-width:0; flex-direction:column; overflow-x:hidden; overflow-y:auto; padding:10px; }
   .tabpanel.active{ display:flex; }
 
+  /* ---------- document tabs ---------- */
+  .document-tabs{
+    display:flex; align-items:stretch; gap:4px; padding:5px 10px 0;
+    background:var(--panel); border-bottom:1px solid var(--border); flex-shrink:0;
+    min-width:0; overflow-x:auto;
+  }
+  .document-tab{
+    display:flex; align-items:center; gap:7px; min-width:130px; max-width:240px;
+    padding:7px 8px 7px 11px; border:1px solid var(--border); border-bottom:none;
+    border-radius:5px 5px 0 0; background:var(--bg); color:var(--muted); cursor:pointer;
+    user-select:none;
+  }
+  .document-tab.active{ background:var(--panel-2); color:var(--text); border-color:var(--accent-dim); }
+  .document-tab.dragging{ opacity:.45; }
+  .document-tab .tab-title{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .document-tab .tab-close{ padding:1px 4px; border:none; background:transparent; color:var(--muted); font-size:14px; line-height:1; }
+  .document-tab .tab-close:hover{ color:var(--danger); }
+  .document-tab-add{ flex-shrink:0; margin:0 0 4px 2px; padding:3px 10px; font-size:16px; line-height:1; }
+
   /* ---------- generic ---------- */
   h3.sec{
     font-size:10.5px; text-transform:uppercase; letter-spacing:.8px; color: var(--muted);
@@ -403,6 +422,8 @@
     <div class="rowcount-badge" id="rowcountBadge">no data loaded</div>
   </header>
 
+  <div class="document-tabs" id="documentTabs" aria-label="Open JSON files"></div>
+
   <main class="layout">
     <!-- LEFT COLUMN -->
     <section class="col-left">
@@ -690,32 +711,92 @@
   };
   let idSeq = 1;
   const nextId = () => "id" + (idSeq++);
+  let tabs = [];
+  let activeTabId = null;
 
   const STATE_STORAGE_KEY = "jqbench_state_v1";
   function serializeWorkbenchState(){
-    return {rawData:state.rawData,rootPath:state.rootPath,search:state.search,filters:state.filters.map(({id,...x})=>x),sorts:state.sorts.map(({id,...x})=>x),offset:state.offset,limit:state.limit,columns:state.columns.map(({id,...x})=>x),aggregations:state.aggregations.map(({id,...x})=>x),view:state.view,pageSize:state.pageSize,page:state.page,treeExpanded:Array.from(state.treeExpanded),columnWidths:state.columnWidths,jsonInput:$("#jsonInput")?.value||"",sourceFileName:state.sourceFileName||"data.json",sidebarWidth:state.sidebarWidth||300};
+    return {rawData:state.rawData,rootPath:state.rootPath,search:state.search,filters:state.filters.map(({id,...x})=>x),sorts:state.sorts.map(({id,...x})=>x),offset:state.offset,limit:state.limit,columns:state.columns.map(({id,...x})=>x),aggregations:state.aggregations.map(({id,...x})=>x),view:state.view,pageSize:state.pageSize,page:state.page,treeExpanded:Array.from(state.treeExpanded),columnWidths:state.columnWidths,jsonInput:$("#jsonInput")?.value||"",sourceFileName:state.sourceFileName||"data.json",sidebarWidth:state.sidebarWidth||300,activePanel:$(".tabbar button.active")?.dataset.tab||"load"};
   }
-  function saveWorkbenchState(){try{localStorage.setItem(STATE_STORAGE_KEY,JSON.stringify(serializeWorkbenchState()));}catch(e){}}
+  function saveWorkbenchState(){
+    try{
+      if(activeTabId){ const tab=tabs.find(x=>x.id===activeTabId); if(tab) tab.state=serializeWorkbenchState(); }
+      localStorage.setItem(STATE_STORAGE_KEY,JSON.stringify({version:2,tabs,activeTabId}));
+    }catch(e){}
+  }
   function updateViewButtons(){
     $("#viewTableBtn").classList.toggle("active",state.view==="table");
     $("#viewJsonBtn").classList.toggle("active",state.view==="json");
+  }
+  function hydrateWorkbenchState(cfg){
+    state.rawData=cfg.rawData??null; state.rootPath=cfg.rootPath||""; state.search=cfg.search||"";
+    state.filters=(cfg.filters||[]).map(f=>({id:nextId(),join:"AND",negated:false,operator:"=",value:"",field:"",...f, ...(f.join === "NOT" ? {join:"AND",negated:true} : {})}));
+    state.sorts=(cfg.sorts||[]).map(x=>({id:nextId(),dir:"asc",field:"",...x}));
+    state.offset=cfg.offset||0; state.limit=cfg.limit??null;
+    state.columns=(cfg.columns||[]).map(c=>({id:nextId(),name:"",path:"",...c}));
+    state.aggregations=(cfg.aggregations||[]).map(a=>({id:nextId(),fn:"count",field:"",...a}));
+    state.view=cfg.view==="json"?"json":"table"; state.pageSize=[25,50,100,250,500].includes(Number(cfg.pageSize))?Number(cfg.pageSize):50; state.page=Math.max(1,parseInt(cfg.page,10)||1);
+    state.treeExpanded=new Set(Array.isArray(cfg.treeExpanded)?cfg.treeExpanded:["root"]);
+    state.columnWidths=(cfg.columnWidths && typeof cfg.columnWidths === "object") ? cfg.columnWidths : {};
+    state.sourceFileName=cfg.sourceFileName||"data.json";
+    state.sidebarWidth=Math.max(240,Math.min(600,parseInt(cfg.sidebarWidth,10)||300));
+    document.documentElement.style.setProperty("--sidebar-width",state.sidebarWidth+"px");
+    $("#jsonInput").value=cfg.jsonInput||(state.rawData!=null?JSON.stringify(state.rawData,null,2):"");
+    $("#jsonEditor").value=cfg.jsonInput||(state.rawData!=null?JSON.stringify(state.rawData,null,2):"");
+    $("#rootPathInput").value=state.rootPath; $("#searchInput").value=state.search;
+    $("#offsetInput").value=state.offset||0; $("#limitInput").value=state.limit??""; $("#pageSizeSel").value=String(state.pageSize);
+    $all(".tabbar button").forEach(b=>b.classList.toggle("active",b.dataset.tab===(cfg.activePanel||"load")));
+    $all(".tabpanel").forEach(p=>p.classList.toggle("active",p.id==="tab-"+(cfg.activePanel||"load")));
+    if(state.rawData!==null){const el=$("#loadStatus");el.className="status-line ok";el.textContent=`✓ Restored — top level is ${Array.isArray(state.rawData)?`array (${state.rawData.length} items)`:typeof state.rawData}`;applyRootPath();renderTree();}
+    renderFilters();renderSorts();renderColumns();renderAggregations();updateViewButtons();
+  }
+  function renderDocumentTabs(){
+    const bar=$("#documentTabs"); bar.innerHTML="";
+    tabs.forEach(tab=>{
+      const el=document.createElement("div"); el.className="document-tab"+(tab.id===activeTabId?" active":""); el.draggable=true; el.dataset.tabId=tab.id;
+      const title=document.createElement("span"); title.className="tab-title"; title.textContent=tab.title; title.title=tab.title;
+      const close=document.createElement("button"); close.className="tab-close"; close.type="button"; close.textContent="×"; close.title="Close tab";
+      close.addEventListener("click",e=>{e.stopPropagation();closeDocumentTab(tab.id);});
+      el.appendChild(title); el.appendChild(close);
+      el.addEventListener("click",()=>switchDocumentTab(tab.id));
+      el.addEventListener("dragstart",e=>{e.dataTransfer.setData("text/plain",tab.id);el.classList.add("dragging");});
+      el.addEventListener("dragend",()=>el.classList.remove("dragging"));
+      el.addEventListener("dragover",e=>e.preventDefault());
+      el.addEventListener("drop",e=>{e.preventDefault();reorderDocumentTab(e.dataTransfer.getData("text/plain"),tab.id);});
+      bar.appendChild(el);
+    });
+    const add=document.createElement("button"); add.className="document-tab-add ghost"; add.type="button"; add.textContent="+"; add.title="Open JSON in a new tab";
+    add.addEventListener("click",()=>$("#fileInput").click()); bar.appendChild(add);
+  }
+  function switchDocumentTab(id){
+    if(id===activeTabId) return;
+    const current=tabs.find(x=>x.id===activeTabId); if(current) current.state=serializeWorkbenchState();
+    const target=tabs.find(x=>x.id===id); if(!target) return;
+    activeTabId=id; hydrateWorkbenchState(target.state); renderDocumentTabs(); runQuery(); saveWorkbenchState();
+  }
+  function closeDocumentTab(id){
+    if(tabs.length===1){toast("Keep one tab open");return;}
+    const index=tabs.findIndex(x=>x.id===id); if(index<0) return;
+    const wasActive=id===activeTabId; tabs.splice(index,1);
+    if(wasActive){ const next=tabs[Math.min(index,tabs.length-1)]; activeTabId=next.id; hydrateWorkbenchState(next.state); runQuery(); }
+    renderDocumentTabs(); saveWorkbenchState();
+  }
+  function reorderDocumentTab(fromId,toId){
+    if(!fromId||fromId===toId) return;
+    const from=tabs.findIndex(x=>x.id===fromId), to=tabs.findIndex(x=>x.id===toId); if(from<0||to<0) return;
+    const [tab]=tabs.splice(from,1); tabs.splice(to,0,tab); renderDocumentTabs(); saveWorkbenchState();
+  }
+  function createDocumentTab(fileName){
+    const tab={id:"tab"+Date.now()+"_"+nextId(),title:fileName||"Untitled",state:serializeWorkbenchState()};
+    tabs.push(tab); activeTabId=tab.id; hydrateWorkbenchState({sourceFileName:tab.title}); renderDocumentTabs(); saveWorkbenchState();
   }
   function restoreWorkbenchState(){
     try{
       const raw=localStorage.getItem(STATE_STORAGE_KEY); if(!raw) return false;
       const cfg=JSON.parse(raw);
-      state.rawData=cfg.rawData??null; state.rootPath=cfg.rootPath||""; state.search=cfg.search||"";
-      state.filters=(cfg.filters||[]).map(f=>({id:nextId(),join:"AND",negated:false,operator:"=",value:"",field:"",...f, ...(f.join === "NOT" ? {join:"AND",negated:true} : {})}));
-      state.sorts=(cfg.sorts||[]).map(x=>({id:nextId(),dir:"asc",field:"",...x}));
-      state.offset=cfg.offset||0; state.limit=cfg.limit??null;
-      state.columns=(cfg.columns||[]).map(c=>({id:nextId(),name:"",path:"",...c}));
-      state.aggregations=(cfg.aggregations||[]).map(a=>({id:nextId(),fn:"count",field:"",...a}));
-      state.view=cfg.view==="json"?"json":"table"; state.pageSize=[25,50,100,250,500].includes(Number(cfg.pageSize))?Number(cfg.pageSize):50; state.page=Math.max(1,parseInt(cfg.page,10)||1);
-      state.treeExpanded=new Set(Array.isArray(cfg.treeExpanded)?cfg.treeExpanded:["root"]);
-      state.columnWidths=(cfg.columnWidths && typeof cfg.columnWidths === "object") ? cfg.columnWidths : {}; state.sourceFileName=cfg.sourceFileName||"data.json"; state.sidebarWidth=Math.max(240,Math.min(600,parseInt(cfg.sidebarWidth,10)||300)); document.documentElement.style.setProperty("--sidebar-width",state.sidebarWidth+"px");
-      $("#jsonInput").value=cfg.jsonInput||(state.rawData!=null?JSON.stringify(state.rawData,null,2):""); $("#jsonEditor").value=cfg.jsonInput||(state.rawData!=null?JSON.stringify(state.rawData,null,2):""); $("#rootPathInput").value=state.rootPath; $("#searchInput").value=state.search; $("#offsetInput").value=state.offset||0; $("#limitInput").value=state.limit??""; $("#pageSizeSel").value=String(state.pageSize);
-      if(state.rawData){const el=$("#loadStatus");el.className="status-line ok";el.textContent=`✓ Restored — top level is ${Array.isArray(state.rawData)?`array (${state.rawData.length} items)`:typeof state.rawData}`;applyRootPath();renderTree();}
-      renderFilters();renderSorts();renderColumns();renderAggregations();updateViewButtons();return true;
+      if(Array.isArray(cfg.tabs) && cfg.tabs.length){ tabs=cfg.tabs; activeTabId=cfg.activeTabId||tabs[0].id; }
+      else { tabs=[{id:"tab_legacy",title:cfg.sourceFileName||"data.json",state:cfg}]; activeTabId=tabs[0].id; }
+      const active=tabs.find(x=>x.id===activeTabId)||tabs[0]; activeTabId=active.id; hydrateWorkbenchState(active.state); renderDocumentTabs(); return true;
     }catch(e){return false;}
   }
 
@@ -2126,7 +2207,10 @@
   fileInput.addEventListener("change", ()=>{ if(fileInput.files[0]) readFile(fileInput.files[0]); });
   function readFile(file){
     const reader = new FileReader();
-    reader.onload = () => { state.sourceFileName = (file.name && /\.json$/i.test(file.name)) ? file.name : ((file.name||"data") + ".json"); $("#jsonInput").value = reader.result; loadJsonText(reader.result); saveWorkbenchState(); };
+    reader.onload = () => {
+      const fileName=(file.name && /\.json$/i.test(file.name)) ? file.name : ((file.name||"data") + ".json");
+      createDocumentTab(fileName); state.sourceFileName=fileName; $("#jsonInput").value = reader.result; loadJsonText(reader.result); saveWorkbenchState();
+    };
     reader.readAsText(file);
   }
 
@@ -2345,6 +2429,12 @@
   const restored=restoreWorkbenchState();
   if(!restored) document.documentElement.style.setProperty("--sidebar-width",state.sidebarWidth+"px");
   if(!restored){renderFilters();renderSorts();renderColumns();renderAggregations();}
+  if(!restored){
+    tabs=[{id:"tab_initial",title:"Untitled",state:serializeWorkbenchState()}];
+    activeTabId=tabs[0].id;
+    renderDocumentTabs();
+    saveWorkbenchState();
+  }
   renderSavedList();renderResults();renderJq();updateViewButtons();
   setupImagePreviews();
   if(restored&&state.rawData) runQuery();

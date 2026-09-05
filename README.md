@@ -7,7 +7,7 @@ A lightweight, browser-based JSON query and editing workbench. Load JSON data, e
 ### Load JSON
 
 - Paste JSON directly into the application.
-- Upload `.json` files using the file picker or drag and drop.
+- Upload `.json` files using the file picker or drag and drop. Each opened file gets its own tab.
 - Supports JSON arrays and objects.
 - Specify an optional root path for nested arrays, such as `data.items` or `response.results`.
 
@@ -121,7 +121,7 @@ Saved queries and workbench state are stored locally in the browser.
 
 JQ Bench is a client-side application and does not require a database or backend.
 
-The current workbench state is stored using browser `localStorage`. This includes loaded JSON, query settings, filters, sorts, columns, pagination settings, view state, tree state, column widths, and other UI state.
+The open tabs and each tab's workbench state are stored using browser `localStorage`. This includes loaded JSON, query settings, filters, sorts, columns, pagination settings, view state, tree state, column widths, and other UI state.
 
 Storage is tied to the browser and website origin.
 
