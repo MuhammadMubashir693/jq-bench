@@ -3297,7 +3297,20 @@
         return state.editorText;
       }
       function formatJsonIn(el, statusEl) {
-        try { const parsed = JSON.parse(editorDocumentText(el)); state.editorText = JSON.stringify(parsed, null, 2); state.editorPage = 1; clearEditorHistory(); renderEditorPage(); setEditStatusEl(statusEl, true, "Valid JSON — formatted"); }
+        const page = state.editorPage;
+        const selection = [el.selectionStart, el.selectionEnd, el.selectionDirection];
+        const scrollTop = el.scrollTop;
+        try {
+          const parsed = JSON.parse(editorDocumentText(el));
+          state.editorText = JSON.stringify(parsed, null, 2);
+          state.editorPage = page;
+          clearEditorHistory();
+          renderEditorPage();
+          el.focus({ preventScroll: true });
+          el.setSelectionRange(Math.min(selection[0], el.value.length), Math.min(selection[1], el.value.length), selection[2]);
+          el.scrollTop = scrollTop;
+          setEditStatusEl(statusEl, true, "Valid JSON — formatted");
+        }
         catch (e) { setEditStatusEl(statusEl, false, "Parse error: " + e.message); }
       }
       function validateJsonIn(el, statusEl) {
