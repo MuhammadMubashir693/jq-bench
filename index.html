@@ -1172,6 +1172,28 @@
       border-color: transparent;
     }
 
+    .editor-pager {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 10.5px;
+    }
+
+    .editor-pager select {
+      width: auto;
+      padding: 3px 6px;
+      font-size: 11px;
+    }
+
+    .editor-pager input[type=number] {
+      width: 52px;
+      padding: 3px 5px;
+      font-size: 11px;
+    }
+
     .toast {
       position: fixed;
       bottom: 18px;
@@ -1285,7 +1307,7 @@
       <section class="col-left">
         <div class="tabbar">
           <button data-tab="load" class="active">Load</button>
-          <button data-tab="edit">Edit JSON</button>
+          <button data-tab="edit">Edit</button>
           <button data-tab="mutate">Mutate</button>
           <button data-tab="browse">Browse</button>
           <button data-tab="query">Query</button>
@@ -1316,17 +1338,33 @@
             <code>a.b[0].c</code> syntax.</div>
         </div>
 
-        <!-- EDIT JSON TAB -->
+        <!-- Edit TAB -->
         <div class="tabpanel" id="tab-edit">
           <div class="row" style="align-items:baseline;">
-            <h3 class="sec" style="margin:0 0 8px; flex:1;">Edit JSON</h3>
+            <h3 class="sec" style="margin:0 0 8px; flex:1;">Edit</h3>
             <button class="ghost xs" id="expandEditorBtn" title="Open in a larger editor">⤢ Expand</button>
           </div>
           <div class="hint" style="margin-bottom:6px;">Edit the currently loaded JSON directly. Validate before applying
             changes to the query.</div>
+          <div class="editor-pager" id="editorPager">
+            <button class="ghost xs icon-btn" id="editorPrevBtn" title="Previous editor page">◂</button>
+            <span id="editorPageInfo">No document</span>
+            <button class="ghost xs icon-btn" id="editorNextBtn" title="Next editor page">▸</button>
+            <label for="editorPageNumber">page</label>
+            <input type="number" id="editorPageNumber" min="1" value="1" aria-label="Editor page number">
+            <label for="editorPageSize">lines/page</label>
+            <select id="editorPageSize">
+              <option value="100">100</option>
+              <option value="250" selected>250</option>
+              <option value="500">500</option>
+            </select>
+          </div>
           <textarea id="jsonEditor" class="json-editor" spellcheck="false"
             placeholder="Load JSON first, then edit it here…"></textarea>
           <div class="row" style="margin-top:6px; flex-wrap:wrap;">
+            <button class="ghost xs" id="cutJsonBtn">Cut</button>
+            <button class="ghost xs" id="copyJsonBtn">Copy</button>
+            <button class="ghost xs" id="pasteJsonBtn">Paste</button>
             <button class="ghost xs" id="formatJsonBtn">Format</button>
             <button class="ghost xs" id="validateJsonBtn">Validate</button>
             <button class="primary xs" id="applyJsonBtn">Apply Changes</button>
@@ -1549,12 +1587,28 @@
 
   <div class="modal-back" id="editorModal">
     <div class="modal modal-wide">
-      <div class="mhead"><b>Edit JSON</b><button class="ghost xs" id="closeEditorModal">Close</button></div>
+      <div class="mhead"><b>Edit</b><button class="ghost xs" id="closeEditorModal">Close</button></div>
       <div class="mbody">
+        <div class="editor-pager" id="editorPagerX" style="padding:6px 14px; margin:0; border-bottom:1px solid var(--border);">
+          <button class="ghost xs icon-btn" id="editorPrevBtnX" title="Previous editor page">◂</button>
+          <span id="editorPageInfoX">No document</span>
+          <button class="ghost xs icon-btn" id="editorNextBtnX" title="Next editor page">▸</button>
+          <label for="editorPageNumberX">page</label>
+          <input type="number" id="editorPageNumberX" min="1" value="1" aria-label="Editor page number">
+          <label for="editorPageSizeX">lines/page</label>
+          <select id="editorPageSizeX">
+            <option value="100">100</option>
+            <option value="250" selected>250</option>
+            <option value="500">500</option>
+          </select>
+        </div>
         <textarea id="jsonEditorExpanded" class="json-editor-expanded" spellcheck="false"
           placeholder="Load JSON first, then edit it here…"></textarea>
       </div>
       <div class="mfoot">
+        <button class="ghost xs" id="cutJsonBtnX">Cut</button>
+        <button class="ghost xs" id="copyJsonBtnX">Copy</button>
+        <button class="ghost xs" id="pasteJsonBtnX">Paste</button>
         <button class="ghost xs" id="formatJsonBtnX">Format</button>
         <button class="ghost xs" id="validateJsonBtnX">Validate</button>
         <button class="primary xs" id="applyJsonBtnX">Apply Changes</button>
@@ -1593,6 +1647,9 @@
         columnWidths: {},
         sourceFileName: "data.json",
         sidebarWidth: 300,
+        editorText: "",
+        editorPage: 1,
+        editorPageSize: 250,
       };
       let idSeq = 1;
       const nextId = () => "id" + (idSeq++);
@@ -1601,7 +1658,7 @@
 
       const STATE_STORAGE_KEY = "jqbench_state_v1";
       function serializeWorkbenchState() {
-        return { rawData: state.rawData, rootPath: state.rootPath, search: state.search, filters: state.filters.map(({ id, ...x }) => x), sorts: state.sorts.map(({ id, ...x }) => x), offset: state.offset, limit: state.limit, columns: state.columns.map(({ id, ...x }) => x), aggregations: state.aggregations.map(({ id, ...x }) => x), view: state.view, pageSize: state.pageSize, page: state.page, treeExpanded: Array.from(state.treeExpanded), columnWidths: state.columnWidths, jsonInput: $("#jsonInput")?.value || "", sourceFileName: state.sourceFileName || "data.json", sidebarWidth: state.sidebarWidth || 300, activePanel: $(".tabbar button.active")?.dataset.tab || "load" };
+        return { rawData: state.rawData, rootPath: state.rootPath, search: state.search, filters: state.filters.map(({ id, ...x }) => x), sorts: state.sorts.map(({ id, ...x }) => x), offset: state.offset, limit: state.limit, columns: state.columns.map(({ id, ...x }) => x), aggregations: state.aggregations.map(({ id, ...x }) => x), view: state.view, pageSize: state.pageSize, page: state.page, treeExpanded: Array.from(state.treeExpanded), columnWidths: state.columnWidths, jsonInput: $("#jsonInput")?.value || "", editorText: state.editorText, editorPage: state.editorPage, editorPageSize: state.editorPageSize, sourceFileName: state.sourceFileName || "data.json", sidebarWidth: state.sidebarWidth || 300, activePanel: $(".tabbar button.active")?.dataset.tab || "load" };
       }
       function saveWorkbenchState() {
         try {
@@ -1624,10 +1681,14 @@
         state.treeExpanded = new Set(Array.isArray(cfg.treeExpanded) ? cfg.treeExpanded : ["root"]);
         state.columnWidths = (cfg.columnWidths && typeof cfg.columnWidths === "object") ? cfg.columnWidths : {};
         state.sourceFileName = cfg.sourceFileName || "data.json";
+        state.editorText = typeof cfg.editorText === "string" ? cfg.editorText : (cfg.rawData != null ? JSON.stringify(cfg.rawData, null, 2) : "");
+        state.editorPage = Math.max(1, parseInt(cfg.editorPage, 10) || 1);
+        state.editorPageSize = [100, 250, 500].includes(Number(cfg.editorPageSize)) ? Number(cfg.editorPageSize) : 250;
         state.sidebarWidth = Math.max(240, Math.min(600, parseInt(cfg.sidebarWidth, 10) || 300));
         document.documentElement.style.setProperty("--sidebar-width", state.sidebarWidth + "px");
         $("#jsonInput").value = cfg.jsonInput || (state.rawData != null ? JSON.stringify(state.rawData, null, 2) : "");
-        $("#jsonEditor").value = cfg.jsonInput || (state.rawData != null ? JSON.stringify(state.rawData, null, 2) : "");
+        $("#jsonEditor").value = "";
+        renderEditorPage();
         $("#rootPathInput").value = state.rootPath; $("#searchInput").value = state.search;
         $("#offsetInput").value = state.offset || 0; $("#limitInput").value = state.limit ?? ""; $("#pageSizeSel").value = String(state.pageSize);
         $all(".tabbar button").forEach(b => b.classList.toggle("active", b.dataset.tab === (cfg.activePanel || "load")));
@@ -1651,7 +1712,7 @@
           bar.appendChild(el);
         });
         const add = document.createElement("button"); add.className = "document-tab-add ghost"; add.type = "button"; add.textContent = "+"; add.title = "Open JSON in a new tab";
-        add.addEventListener("click", () => $("#fileInput").click()); bar.appendChild(add);
+        add.addEventListener("click", () => createDocumentTab()); bar.appendChild(add);
       }
       function switchDocumentTab(id) {
         if (id === activeTabId) return;
@@ -1660,10 +1721,13 @@
         activeTabId = id; hydrateWorkbenchState(target.state); renderDocumentTabs(); runQuery(); saveWorkbenchState();
       }
       function closeDocumentTab(id) {
-        if (tabs.length === 1) { toast("Keep one tab open"); return; }
         const index = tabs.findIndex(x => x.id === id); if (index < 0) return;
         const wasActive = id === activeTabId; tabs.splice(index, 1);
-        if (wasActive) { const next = tabs[Math.min(index, tabs.length - 1)]; activeTabId = next.id; hydrateWorkbenchState(next.state); runQuery(); }
+        if (wasActive) {
+          const next = tabs[Math.min(index, tabs.length - 1)];
+          if (next) { activeTabId = next.id; hydrateWorkbenchState(next.state); runQuery(); }
+          else { activeTabId = null; hydrateWorkbenchState({}); renderResults(); }
+        }
         renderDocumentTabs(); saveWorkbenchState();
       }
       function reorderDocumentTab(fromId, toId) {
@@ -1672,16 +1736,19 @@
         const [tab] = tabs.splice(from, 1); tabs.splice(to, 0, tab); renderDocumentTabs(); saveWorkbenchState();
       }
       function createDocumentTab(fileName) {
-        const tab = { id: "tab" + Date.now() + "_" + nextId(), title: fileName || "Untitled", state: serializeWorkbenchState() };
+        const tab = { id: "tab" + Date.now() + "_" + nextId(), title: fileName || "Untitled", state: { sourceFileName: fileName || "data.json", jsonInput: "", editorText: "" } };
         tabs.push(tab); activeTabId = tab.id; hydrateWorkbenchState({ sourceFileName: tab.title }); renderDocumentTabs(); saveWorkbenchState();
       }
       function restoreWorkbenchState() {
         try {
           const raw = localStorage.getItem(STATE_STORAGE_KEY); if (!raw) return false;
           const cfg = JSON.parse(raw);
-          if (Array.isArray(cfg.tabs) && cfg.tabs.length) { tabs = cfg.tabs; activeTabId = cfg.activeTabId || tabs[0].id; }
+          if (Array.isArray(cfg.tabs)) { tabs = cfg.tabs; activeTabId = cfg.activeTabId || (tabs[0] && tabs[0].id) || null; }
           else { tabs = [{ id: "tab_legacy", title: cfg.sourceFileName || "data.json", state: cfg }]; activeTabId = tabs[0].id; }
-          const active = tabs.find(x => x.id === activeTabId) || tabs[0]; activeTabId = active.id; hydrateWorkbenchState(active.state); renderDocumentTabs(); return true;
+          const active = tabs.find(x => x.id === activeTabId) || tabs[0];
+          if (active) { activeTabId = active.id; hydrateWorkbenchState(active.state); }
+          else { activeTabId = null; hydrateWorkbenchState({}); }
+          renderDocumentTabs(); return true;
         } catch (e) { return false; }
       }
 
@@ -1822,7 +1889,9 @@
         try {
           const parsed = JSON.parse(text);
           state.rawData = parsed;
-          $("#jsonEditor").value = JSON.stringify(parsed, null, 2);
+          state.editorText = JSON.stringify(parsed, null, 2);
+          state.editorPage = 1;
+          renderEditorPage();
           $("#editStatus").className = "status-line ok"; $("#editStatus").textContent = "✓ Valid JSON";
           statusEl.className = "status-line ok";
           const kind = Array.isArray(parsed) ? `array (${parsed.length} items)` : typeof parsed;
@@ -2968,8 +3037,9 @@
         if (changed === 0 && removed === 0) { toast("No matching field changed"); return; }
         const pretty = JSON.stringify(state.rawData, null, 2);
         $("#jsonInput").value = pretty;
-        $("#jsonEditor").value = pretty;
-        if ($("#jsonEditorExpanded")) $("#jsonEditorExpanded").value = pretty;
+        state.editorText = pretty;
+        state.editorPage = 1;
+        renderEditorPage();
         applyRootPath();
         renderTree();
         runQuery();
@@ -3099,7 +3169,7 @@
         reader.readAsText(file);
       }
 
-      // edit JSON
+      // Edit
       // Shared logic drives both the sidebar editor (#jsonEditor) and the expanded
       // full-screen editor (#jsonEditorExpanded) — each button just points at its own textarea/status pair.
       function setEditStatusEl(el, ok, text) {
@@ -3107,33 +3177,68 @@
       }
       function setEditStatus(ok, text) { setEditStatusEl($("#editStatus"), ok, text); }
       function syncEditorFromState() {
-        const text = state.rawData == null ? "" : JSON.stringify(state.rawData, null, 2);
-        $("#jsonEditor").value = text;
+        state.editorText = state.rawData == null ? "" : JSON.stringify(state.rawData, null, 2);
+        state.editorPage = 1;
+        renderEditorPage();
+      }
+      function editorLines() { return state.editorText ? state.editorText.split("\n") : []; }
+      function editorPageCount() { return Math.max(1, Math.ceil(editorLines().length / state.editorPageSize)); }
+      function commitEditorPage(el) {
+        const lines = editorLines();
+        const start = (state.editorPage - 1) * state.editorPageSize;
+        const pageLines = el.value.split("\n");
+        lines.splice(start, state.editorPageSize, ...pageLines);
+        state.editorText = lines.join("\n");
+      }
+      function renderEditorPage() {
+        const lines = editorLines();
+        const totalPages = editorPageCount();
+        state.editorPage = Math.min(state.editorPage, totalPages);
+        const start = (state.editorPage - 1) * state.editorPageSize;
+        const text = lines.slice(start, start + state.editorPageSize).join("\n");
+        ["#jsonEditor", "#jsonEditorExpanded"].forEach(selector => { const el = $(selector); if (el) el.value = text; });
+        ["", "X"].forEach(suffix => {
+          const info = $("#editorPageInfo" + suffix);
+          const prev = $("#editorPrevBtn" + suffix);
+          const next = $("#editorNextBtn" + suffix);
+          if (info) info.textContent = lines.length ? `Lines ${start + 1}–${Math.min(start + state.editorPageSize, lines.length)} of ${lines.length} · page ${state.editorPage}/${totalPages}` : "Blank document";
+          if (prev) prev.disabled = state.editorPage <= 1;
+          if (next) next.disabled = state.editorPage >= totalPages;
+          const size = $("#editorPageSize" + suffix);
+          if (size) size.value = String(state.editorPageSize);
+          const pageNumber = $("#editorPageNumber" + suffix);
+          if (pageNumber) { pageNumber.value = String(state.editorPage); pageNumber.max = String(totalPages); }
+        });
+      }
+      function editorDocumentText(el) {
+        commitEditorPage(el);
+        return state.editorText;
       }
       function formatJsonIn(el, statusEl) {
-        try { const parsed = JSON.parse(el.value); el.value = JSON.stringify(parsed, null, 2); setEditStatusEl(statusEl, true, "Valid JSON — formatted"); }
+        try { const parsed = JSON.parse(editorDocumentText(el)); state.editorText = JSON.stringify(parsed, null, 2); state.editorPage = 1; renderEditorPage(); setEditStatusEl(statusEl, true, "Valid JSON — formatted"); }
         catch (e) { setEditStatusEl(statusEl, false, "Parse error: " + e.message); }
       }
       function validateJsonIn(el, statusEl) {
-        try { JSON.parse(el.value); setEditStatusEl(statusEl, true, "Valid JSON"); }
+        try { JSON.parse(editorDocumentText(el)); setEditStatusEl(statusEl, true, "Valid JSON"); }
         catch (e) { setEditStatusEl(statusEl, false, "Parse error: " + e.message); }
       }
       function applyJsonFrom(el, statusEl, otherEl) {
-        const text = el.value;
+        const text = editorDocumentText(el);
         try {
           const parsed = JSON.parse(text);
           state.rawData = parsed;
           const pretty = JSON.stringify(parsed, null, 2);
+          state.editorText = pretty;
+          state.editorPage = 1;
           $("#jsonInput").value = pretty;
-          el.value = pretty;
-          if (otherEl) otherEl.value = pretty;
+          renderEditorPage();
           applyRootPath(); renderTree(); runQuery();
           setEditStatusEl(statusEl, true, "Changes applied to the query");
           saveWorkbenchState(); toast("JSON changes applied");
         } catch (e) { setEditStatusEl(statusEl, false, "Parse error: " + e.message); }
       }
       async function saveJsonFrom(el, statusEl) {
-        const text = el.value;
+        const text = editorDocumentText(el);
         try { JSON.parse(text); }
         catch (e) { setEditStatusEl(statusEl, false, "Fix the JSON before saving: " + e.message); return; }
         const filename = state.sourceFileName || "data.json";
@@ -3150,22 +3255,84 @@
       }
 
       // sidebar editor
+      function changeEditorPage(delta) {
+        const current = $("#jsonEditor");
+        if (current) commitEditorPage(current);
+        state.editorPage = Math.max(1, Math.min(editorPageCount(), state.editorPage + delta));
+        renderEditorPage();
+        saveWorkbenchState();
+      }
+      function goToEditorPage(value) {
+        const current = $("#jsonEditor");
+        if (current) commitEditorPage(current);
+        const page = parseInt(value, 10);
+        state.editorPage = Number.isFinite(page) ? Math.max(1, Math.min(editorPageCount(), page)) : 1;
+        renderEditorPage();
+        saveWorkbenchState();
+      }
+      function setEditorPageSize(value) {
+        const current = $("#jsonEditor");
+        if (current) commitEditorPage(current);
+        state.editorPageSize = Number(value) || 250;
+        state.editorPage = Math.min(state.editorPage, editorPageCount());
+        renderEditorPage();
+        saveWorkbenchState();
+      }
+      function editorClipboard(action, el) {
+        if (!navigator.clipboard) { toast("Clipboard access unavailable"); return; }
+        const start = el.selectionStart;
+        const end = el.selectionEnd;
+        const selected = el.value.slice(start, end);
+        if (action === "copy" || action === "cut") {
+          if (!selected) return;
+          navigator.clipboard.writeText(selected).then(() => {
+            if (action === "cut") {
+              el.setRangeText("", start, end, "end");
+              commitEditorPage(el);
+              saveWorkbenchState();
+            }
+            toast(action === "cut" ? "Selection cut" : "Selection copied");
+          }).catch(() => toast("Clipboard access unavailable"));
+          return;
+        }
+        navigator.clipboard.readText().then(text => {
+          el.setRangeText(text, start, end, "end");
+          commitEditorPage(el);
+          saveWorkbenchState();
+          toast("Pasted from clipboard");
+        }).catch(() => toast("Clipboard access unavailable"));
+      }
+      function preserveEditorSelection(button) { button.addEventListener("mousedown", e => e.preventDefault()); }
+      [["#editorPrevBtn", -1], ["#editorPrevBtnX", -1], ["#editorNextBtn", 1], ["#editorNextBtnX", 1]].forEach(([selector, delta]) => $(selector).addEventListener("click", () => changeEditorPage(delta)));
+      ["#editorPageSize", "#editorPageSizeX"].forEach(selector => $(selector).addEventListener("change", e => setEditorPageSize(e.target.value)));
+      ["#editorPageNumber", "#editorPageNumberX"].forEach(selector => {
+        const input = $(selector);
+        input.addEventListener("change", e => goToEditorPage(e.target.value));
+        input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); goToEditorPage(e.target.value); } });
+      });
+      [["#cutJsonBtn", "cut"], ["#cutJsonBtnX", "cut"], ["#copyJsonBtn", "copy"], ["#copyJsonBtnX", "copy"], ["#pasteJsonBtn", "paste"], ["#pasteJsonBtnX", "paste"]].forEach(([buttonSelector, action]) => {
+        const button = $(buttonSelector);
+        preserveEditorSelection(button);
+        button.addEventListener("click", () => editorClipboard(action, $(buttonSelector.endsWith("X") ? "#jsonEditorExpanded" : "#jsonEditor")));
+      });
       $("#formatJsonBtn").addEventListener("click", () => formatJsonIn($("#jsonEditor"), $("#editStatus")));
       $("#validateJsonBtn").addEventListener("click", () => validateJsonIn($("#jsonEditor"), $("#editStatus")));
       $("#applyJsonBtn").addEventListener("click", () => applyJsonFrom($("#jsonEditor"), $("#editStatus"), $("#jsonEditorExpanded")));
       $("#saveJsonBtn").addEventListener("click", () => saveJsonFrom($("#jsonEditor"), $("#editStatus")));
-      $("#jsonEditor").addEventListener("input", debounce(() => saveWorkbenchState(), 400));
+      $("#jsonEditor").addEventListener("input", debounce(() => { commitEditorPage($("#jsonEditor")); saveWorkbenchState(); }, 400));
 
       // expanded editor (full-screen modal, for more room to work)
       $("#expandEditorBtn").addEventListener("click", () => {
-        $("#jsonEditorExpanded").value = $("#jsonEditor").value;
+        commitEditorPage($("#jsonEditor"));
+        renderEditorPage();
         setEditStatusEl($("#editStatusX"), true, "");
         $("#editStatusX").textContent = "";
         $("#editorModal").classList.add("show");
         setTimeout(() => $("#jsonEditorExpanded").focus(), 0);
       });
       function closeEditorModal() {
-        $("#jsonEditor").value = $("#jsonEditorExpanded").value;
+        commitEditorPage($("#jsonEditorExpanded"));
+        renderEditorPage();
         saveWorkbenchState();
         $("#editorModal").classList.remove("show");
       }
@@ -3176,6 +3343,7 @@
       $("#applyJsonBtnX").addEventListener("click", () => applyJsonFrom($("#jsonEditorExpanded"), $("#editStatusX"), $("#jsonEditor")));
       $("#saveJsonBtnX").addEventListener("click", () => saveJsonFrom($("#jsonEditorExpanded"), $("#editStatusX")));
       $("#jsonEditorExpanded").addEventListener("input", debounce(() => {
+        commitEditorPage($("#jsonEditorExpanded"));
         $("#jsonEditor").value = $("#jsonEditorExpanded").value;
         saveWorkbenchState();
       }, 400));

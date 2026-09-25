@@ -8,6 +8,7 @@ A lightweight, browser-based JSON query and editing workbench. Load JSON data, e
 
 - Paste JSON directly into the application.
 - Upload `.json` files using the file picker or drag and drop. Each opened file gets its own tab.
+- New tabs start as blank JSON documents, and all tabs may be closed. Use the Load panel to paste or select data later.
 - Supports JSON arrays and objects.
 - Specify an optional root path for nested arrays, such as `data.items` or `response.results`.
 
@@ -70,12 +71,14 @@ Choose which fields appear in the results.
 - Extract nested values using paths.
 - Work with nested arrays such as `videos[].durationSeconds`.
 
-### Edit JSON
+### Edit
 
-The **Edit JSON** tab provides a built-in JSON editor.
+The **Edit** tab provides a built-in JSON editor.
 
 Available actions:
 
+- Edit large documents a page of lines at a time.
+- Cut, copy, and paste the current selection.
 - Format JSON
 - Validate JSON
 - Apply changes
