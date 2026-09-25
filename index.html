@@ -1362,6 +1362,8 @@
           <textarea id="jsonEditor" class="json-editor" spellcheck="false"
             placeholder="Load JSON first, then edit it here…"></textarea>
           <div class="row" style="margin-top:6px; flex-wrap:wrap;">
+            <button class="ghost xs" id="undoJsonBtn" title="Undo (Ctrl+Z)" disabled>Undo</button>
+            <button class="ghost xs" id="redoJsonBtn" title="Redo (Ctrl+Y)" disabled>Redo</button>
             <button class="ghost xs" id="cutJsonBtn">Cut</button>
             <button class="ghost xs" id="copyJsonBtn">Copy</button>
             <button class="ghost xs" id="pasteJsonBtn">Paste</button>
@@ -1606,6 +1608,8 @@
           placeholder="Load JSON first, then edit it here…"></textarea>
       </div>
       <div class="mfoot">
+        <button class="ghost xs" id="undoJsonBtnX" title="Undo (Ctrl+Z)" disabled>Undo</button>
+        <button class="ghost xs" id="redoJsonBtnX" title="Redo (Ctrl+Y)" disabled>Redo</button>
         <button class="ghost xs" id="cutJsonBtnX">Cut</button>
         <button class="ghost xs" id="copyJsonBtnX">Copy</button>
         <button class="ghost xs" id="pasteJsonBtnX">Paste</button>
@@ -1655,6 +1659,7 @@
       const nextId = () => "id" + (idSeq++);
       let tabs = [];
       let activeTabId = null;
+      const editorHistories = new Map();
 
       const STATE_STORAGE_KEY = "jqbench_state_v1";
       function serializeWorkbenchState() {
@@ -1723,6 +1728,7 @@
       function closeDocumentTab(id) {
         const index = tabs.findIndex(x => x.id === id); if (index < 0) return;
         const wasActive = id === activeTabId; tabs.splice(index, 1);
+        editorHistories.delete(id);
         if (wasActive) {
           const next = tabs[Math.min(index, tabs.length - 1)];
           if (next) { activeTabId = next.id; hydrateWorkbenchState(next.state); runQuery(); }
@@ -1891,6 +1897,7 @@
           state.rawData = parsed;
           state.editorText = JSON.stringify(parsed, null, 2);
           state.editorPage = 1;
+          clearEditorHistory();
           renderEditorPage();
           $("#editStatus").className = "status-line ok"; $("#editStatus").textContent = "✓ Valid JSON";
           statusEl.className = "status-line ok";
@@ -3179,16 +3186,87 @@
       function syncEditorFromState() {
         state.editorText = state.rawData == null ? "" : JSON.stringify(state.rawData, null, 2);
         state.editorPage = 1;
+        clearEditorHistory();
         renderEditorPage();
       }
       function editorLines() { return state.editorText ? state.editorText.split("\n") : []; }
       function editorPageCount() { return Math.max(1, Math.ceil(editorLines().length / state.editorPageSize)); }
-      function commitEditorPage(el) {
+      function editorHistory() {
+        const key = activeTabId || "_untabbed";
+        if (!editorHistories.has(key)) editorHistories.set(key, { undo: [], redo: [], lastEditAt: 0 });
+        return editorHistories.get(key);
+      }
+      function clearEditorHistory() {
+        editorHistories.set(activeTabId || "_untabbed", { undo: [], redo: [], lastEditAt: 0 });
+        updateEditorHistoryButtons();
+      }
+      function updateEditorHistoryButtons() {
+        const history = editorHistory();
+        ["#undoJsonBtn", "#undoJsonBtnX"].forEach(selector => { const button = $(selector); if (button) button.disabled = history.undo.length === 0; });
+        ["#redoJsonBtn", "#redoJsonBtnX"].forEach(selector => { const button = $(selector); if (button) button.disabled = history.redo.length === 0; });
+      }
+      function recordEditorChange(start, before, after, mergeTyping) {
+        if (before.length === after.length && before.every((line, index) => line === after[index])) return;
+        const history = editorHistory();
+        const now = Date.now();
+        let prefix = 0;
+        while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix++;
+        let suffix = 0;
+        while (suffix < before.length - prefix && suffix < after.length - prefix && before[before.length - 1 - suffix] === after[after.length - 1 - suffix]) suffix++;
+        const changeStart = start + prefix;
+        const beforeChange = before.slice(prefix, before.length - suffix);
+        const afterChange = after.slice(prefix, after.length - suffix);
+        const previous = history.undo[history.undo.length - 1];
+        if (mergeTyping && previous?.typing && previous.start === changeStart && now - history.lastEditAt < 750) {
+          previous.after = afterChange;
+        } else {
+          history.undo.push({ start: changeStart, before: beforeChange, after: afterChange, typing: mergeTyping });
+          let historyBytes = history.undo.reduce((total, entry) => total + JSON.stringify(entry).length * 2, 0);
+          while (history.undo.length > 100 || historyBytes > 5 * 1024 * 1024) {
+            const removed = history.undo.shift();
+            historyBytes -= JSON.stringify(removed).length * 2;
+          }
+        }
+        history.lastEditAt = now;
+        history.redo = [];
+        updateEditorHistoryButtons();
+      }
+      function commitEditorPage(el, mergeTyping = false) {
         const lines = editorLines();
         const start = (state.editorPage - 1) * state.editorPageSize;
+        const before = lines.slice(start, start + state.editorPageSize);
         const pageLines = el.value.split("\n");
-        lines.splice(start, state.editorPageSize, ...pageLines);
+        recordEditorChange(start, before, pageLines, mergeTyping);
+        lines.splice(start, before.length, ...pageLines);
         state.editorText = lines.join("\n");
+        renderEditorPage();
+      }
+      function activeEditor() { return $("#editorModal").classList.contains("show") ? $("#jsonEditorExpanded") : $("#jsonEditor"); }
+      function applyEditorHistory(from, to) {
+        const entry = from.pop();
+        if (!entry) return;
+        const lines = editorLines();
+        const replacement = to === editorHistory().undo ? entry.after : entry.before;
+        const removeCount = to === editorHistory().undo ? entry.before.length : entry.after.length;
+        lines.splice(entry.start, removeCount, ...replacement);
+        state.editorText = lines.join("\n");
+        state.editorPage = Math.max(1, Math.floor(entry.start / state.editorPageSize) + 1);
+        editorHistory().lastEditAt = 0;
+        to.push(entry);
+        renderEditorPage();
+        saveWorkbenchState();
+      }
+      function undoEditor() {
+        const editor = activeEditor();
+        commitEditorPage(editor);
+        const history = editorHistory();
+        applyEditorHistory(history.undo, history.redo);
+      }
+      function redoEditor() {
+        const editor = activeEditor();
+        commitEditorPage(editor);
+        const history = editorHistory();
+        applyEditorHistory(history.redo, history.undo);
       }
       function renderEditorPage() {
         const lines = editorLines();
@@ -3196,7 +3274,10 @@
         state.editorPage = Math.min(state.editorPage, totalPages);
         const start = (state.editorPage - 1) * state.editorPageSize;
         const text = lines.slice(start, start + state.editorPageSize).join("\n");
+        const focusedEditor = document.activeElement && ["jsonEditor", "jsonEditorExpanded"].includes(document.activeElement.id) ? document.activeElement : null;
+        const selection = focusedEditor ? [focusedEditor.selectionStart, focusedEditor.selectionEnd, focusedEditor.selectionDirection] : null;
         ["#jsonEditor", "#jsonEditorExpanded"].forEach(selector => { const el = $(selector); if (el) el.value = text; });
+        if (focusedEditor && selection) focusedEditor.setSelectionRange(Math.min(selection[0], text.length), Math.min(selection[1], text.length), selection[2]);
         ["", "X"].forEach(suffix => {
           const info = $("#editorPageInfo" + suffix);
           const prev = $("#editorPrevBtn" + suffix);
@@ -3209,13 +3290,14 @@
           const pageNumber = $("#editorPageNumber" + suffix);
           if (pageNumber) { pageNumber.value = String(state.editorPage); pageNumber.max = String(totalPages); }
         });
+        updateEditorHistoryButtons();
       }
       function editorDocumentText(el) {
         commitEditorPage(el);
         return state.editorText;
       }
       function formatJsonIn(el, statusEl) {
-        try { const parsed = JSON.parse(editorDocumentText(el)); state.editorText = JSON.stringify(parsed, null, 2); state.editorPage = 1; renderEditorPage(); setEditStatusEl(statusEl, true, "Valid JSON — formatted"); }
+        try { const parsed = JSON.parse(editorDocumentText(el)); state.editorText = JSON.stringify(parsed, null, 2); state.editorPage = 1; clearEditorHistory(); renderEditorPage(); setEditStatusEl(statusEl, true, "Valid JSON — formatted"); }
         catch (e) { setEditStatusEl(statusEl, false, "Parse error: " + e.message); }
       }
       function validateJsonIn(el, statusEl) {
@@ -3230,6 +3312,7 @@
           const pretty = JSON.stringify(parsed, null, 2);
           state.editorText = pretty;
           state.editorPage = 1;
+          clearEditorHistory();
           $("#jsonInput").value = pretty;
           renderEditorPage();
           applyRootPath(); renderTree(); runQuery();
@@ -3256,14 +3339,14 @@
 
       // sidebar editor
       function changeEditorPage(delta) {
-        const current = $("#jsonEditor");
+        const current = activeEditor();
         if (current) commitEditorPage(current);
         state.editorPage = Math.max(1, Math.min(editorPageCount(), state.editorPage + delta));
         renderEditorPage();
         saveWorkbenchState();
       }
       function goToEditorPage(value) {
-        const current = $("#jsonEditor");
+        const current = activeEditor();
         if (current) commitEditorPage(current);
         const page = parseInt(value, 10);
         state.editorPage = Number.isFinite(page) ? Math.max(1, Math.min(editorPageCount(), page)) : 1;
@@ -3271,7 +3354,7 @@
         saveWorkbenchState();
       }
       function setEditorPageSize(value) {
-        const current = $("#jsonEditor");
+        const current = activeEditor();
         if (current) commitEditorPage(current);
         state.editorPageSize = Number(value) || 250;
         state.editorPage = Math.min(state.editorPage, editorPageCount());
@@ -3303,6 +3386,8 @@
         }).catch(() => toast("Clipboard access unavailable"));
       }
       function preserveEditorSelection(button) { button.addEventListener("mousedown", e => e.preventDefault()); }
+      ["#undoJsonBtn", "#undoJsonBtnX"].forEach(selector => $(selector).addEventListener("click", undoEditor));
+      ["#redoJsonBtn", "#redoJsonBtnX"].forEach(selector => $(selector).addEventListener("click", redoEditor));
       [["#editorPrevBtn", -1], ["#editorPrevBtnX", -1], ["#editorNextBtn", 1], ["#editorNextBtnX", 1]].forEach(([selector, delta]) => $(selector).addEventListener("click", () => changeEditorPage(delta)));
       ["#editorPageSize", "#editorPageSizeX"].forEach(selector => $(selector).addEventListener("change", e => setEditorPageSize(e.target.value)));
       ["#editorPageNumber", "#editorPageNumberX"].forEach(selector => {
@@ -3319,7 +3404,19 @@
       $("#validateJsonBtn").addEventListener("click", () => validateJsonIn($("#jsonEditor"), $("#editStatus")));
       $("#applyJsonBtn").addEventListener("click", () => applyJsonFrom($("#jsonEditor"), $("#editStatus"), $("#jsonEditorExpanded")));
       $("#saveJsonBtn").addEventListener("click", () => saveJsonFrom($("#jsonEditor"), $("#editStatus")));
-      $("#jsonEditor").addEventListener("input", debounce(() => { commitEditorPage($("#jsonEditor")); saveWorkbenchState(); }, 400));
+      const saveEditorStateLater = debounce(saveWorkbenchState, 400);
+      function handleEditorInput(el) {
+        commitEditorPage(el, true);
+        saveEditorStateLater();
+      }
+      function handleEditorHistoryKeys(e) {
+        if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+        const key = e.key.toLowerCase();
+        if (key === "z") { e.preventDefault(); e.shiftKey ? redoEditor() : undoEditor(); }
+        else if (key === "y") { e.preventDefault(); redoEditor(); }
+      }
+      $("#jsonEditor").addEventListener("input", () => handleEditorInput($("#jsonEditor")));
+      $("#jsonEditor").addEventListener("keydown", handleEditorHistoryKeys);
 
       // expanded editor (full-screen modal, for more room to work)
       $("#expandEditorBtn").addEventListener("click", () => {
@@ -3342,11 +3439,8 @@
       $("#validateJsonBtnX").addEventListener("click", () => validateJsonIn($("#jsonEditorExpanded"), $("#editStatusX")));
       $("#applyJsonBtnX").addEventListener("click", () => applyJsonFrom($("#jsonEditorExpanded"), $("#editStatusX"), $("#jsonEditor")));
       $("#saveJsonBtnX").addEventListener("click", () => saveJsonFrom($("#jsonEditorExpanded"), $("#editStatusX")));
-      $("#jsonEditorExpanded").addEventListener("input", debounce(() => {
-        commitEditorPage($("#jsonEditorExpanded"));
-        $("#jsonEditor").value = $("#jsonEditorExpanded").value;
-        saveWorkbenchState();
-      }, 400));
+      $("#jsonEditorExpanded").addEventListener("input", () => handleEditorInput($("#jsonEditorExpanded")));
+      $("#jsonEditorExpanded").addEventListener("keydown", handleEditorHistoryKeys);
 
       // data mutation
       $("#mutOperation").addEventListener("change", refreshMutationUI);
