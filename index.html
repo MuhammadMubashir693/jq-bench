@@ -1668,6 +1668,14 @@
       function saveWorkbenchState() {
         try {
           if (activeTabId) { const tab = tabs.find(x => x.id === activeTabId); if (tab) tab.state = serializeWorkbenchState(); }
+          const stored = JSON.parse(localStorage.getItem(STATE_STORAGE_KEY) || "null");
+          if (Array.isArray(stored?.tabs)) {
+            stored.tabs.forEach(storedTab => {
+              const index = tabs.findIndex(tab => tab.id === storedTab.id);
+              if (index < 0) tabs.push(storedTab);
+              else if (storedTab.id !== activeTabId) tabs[index] = storedTab;
+            });
+          }
           localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify({ version: 2, tabs, activeTabId }));
         } catch (e) { }
       }
@@ -1742,6 +1750,7 @@
         const [tab] = tabs.splice(from, 1); tabs.splice(to, 0, tab); renderDocumentTabs(); saveWorkbenchState();
       }
       function createDocumentTab(fileName) {
+        saveWorkbenchState();
         const tab = { id: "tab" + Date.now() + "_" + nextId(), title: fileName || "Untitled", state: { sourceFileName: fileName || "data.json", jsonInput: "", editorText: "" } };
         tabs.push(tab); activeTabId = tab.id; hydrateWorkbenchState({ sourceFileName: tab.title }); renderDocumentTabs(); saveWorkbenchState();
       }
@@ -3171,7 +3180,15 @@
         const reader = new FileReader();
         reader.onload = () => {
           const fileName = (file.name && /\.json$/i.test(file.name)) ? file.name : ((file.name || "data") + ".json");
-          createDocumentTab(fileName); state.sourceFileName = fileName; $("#jsonInput").value = reader.result; loadJsonText(reader.result); saveWorkbenchState();
+          const currentTab = tabs.find(tab => tab.id === activeTabId);
+          if (currentTab && state.rawData === null && !$("#jsonInput").value.trim()) {
+            currentTab.title = fileName;
+            state.sourceFileName = fileName;
+            renderDocumentTabs();
+          } else {
+            createDocumentTab(fileName);
+          }
+          state.sourceFileName = fileName; $("#jsonInput").value = reader.result; loadJsonText(reader.result); saveWorkbenchState();
         };
         reader.readAsText(file);
       }
