@@ -1668,14 +1668,6 @@
       function saveWorkbenchState() {
         try {
           if (activeTabId) { const tab = tabs.find(x => x.id === activeTabId); if (tab) tab.state = serializeWorkbenchState(); }
-          const stored = JSON.parse(localStorage.getItem(STATE_STORAGE_KEY) || "null");
-          if (Array.isArray(stored?.tabs)) {
-            stored.tabs.forEach(storedTab => {
-              const index = tabs.findIndex(tab => tab.id === storedTab.id);
-              if (index < 0) tabs.push(storedTab);
-              else if (storedTab.id !== activeTabId) tabs[index] = storedTab;
-            });
-          }
           localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify({ version: 2, tabs, activeTabId }));
         } catch (e) { }
       }
